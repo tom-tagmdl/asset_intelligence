@@ -1,0 +1,56 @@
+{
+  "title": "Asset Intelligence",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Asset Intelligence",
+        "description": "Set up Asset Intelligence."
+      }
+    }
+  },
+
+  "options": {
+    "step": {
+      "init": {
+        "title": "Asset Intelligence Settings",
+        "description": "Configure default labels and document management behavior.",
+
+        "data": {
+          "default_label_ids": "Default labels for new assets",
+          "documents_enabled": "Enable document management",
+          "document_storage_path": "Document storage location"
+        },
+
+        "data_description": {
+          "default_label_ids": "Select labels that should be applied automatically to new assets.",
+
+          "documents_enabled": "Enables document storage and management features.",
+
+          "document_storage_path": "Enter a folder path that Home Assistant can access. When a valid path is provided, document management is enabled automatically."
+        }
+      }
+    },
+
+    "error": {
+      "path_required": "A document storage path is required when document management is enabled."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "asset_count": {
+        "name": "Asset Count"
+      },
+      "asset_list": {
+        "name": "Asset List"
+      }
+    },
+    "binary_sensor": {
+      "asset_at_risk": {
+        "name": "At Risk"
+      },
+      "document_storage_available": {
+        "name": "Document Storage Available"
+      }
+    }
+  }
+}

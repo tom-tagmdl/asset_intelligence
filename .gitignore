@@ -1,0 +1,38 @@
+# Created by coverage.py
+*# Python
+__pycache__/
+*.pyc
+
+# Virtual env
+.venv/
+
+# Pytest / cache
+.pytest_cache/
+.cache/
+
+# Test artifacts
+tests/artifacts/
+htmlcov/
+coverage.xml
+pytest*.xml
+
+# Temp files
+tmp_*.py
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+
+# HA runtime (never commit)
+*.db
+*.db-shm
+*.db-wal
+*.log
+.HA_VERSION
+ha_run.lock
+
+# YAML (exclude HA runtime, allow integration config)
+*.yaml
+!services.yaml
