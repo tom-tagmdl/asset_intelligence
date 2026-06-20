@@ -1,4 +1,4 @@
-[<img width="1536" height="1024" alt="banner_light" src="https://github.com/user-attachments/assets/4cc5e06c-027b-4f5b-972a-d35df0e19410" />
+<img width="1536" height="1024" alt="banner_light" src="https://github.com/user-attachments/assets/4cc5e06c-027b-4f5b-972a-d35df0e19410" />
 
 
 # Asset Intelligence
