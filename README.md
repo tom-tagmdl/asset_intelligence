@@ -21,9 +21,9 @@ into
 
 To understand how the system works:
 
-- 👉 [Concepts](https://github.com/tom-tagmdl/asset_intellgence/wiki/Concepts)
-- 👉 [Getting Started](https://github.com/tom-tagmdl/asset_intellgence/wiki/Getting-Started)
-- 👉 [System Flow Overview](https://github.com/tom-tagmdl/asset_intellgence/wiki/System-Flow-Overview)
+- 👉 [Concepts](https://github.com/tom-tagmdl/asset_intelligence/wiki/Concepts)
+- 👉 [Getting Started](https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started)
+- 👉 [System Flow Overview](https://github.com/tom-tagmdl/asset_intelligence/wiki/System-Flow-Overview)
 
 ---
 
