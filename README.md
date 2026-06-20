@@ -21,9 +21,9 @@ into
 
 To understand how the system works:
 
-- 👉 https://github.com/tom-tagmdl/asset_intellgence/wiki/Concepts
-- 👉 https://github.com/tom-tagmdl/asset_intellgence/wiki/Getting-Started
-- 👉 https://github.com/tom-tagmdl/asset_intellgence/wiki/System-Flow-Overview
+- 👉 [Concepts](https://github.com/tom-tagmdl/asset_intellgence/wiki/Concepts)
+- 👉 [Getting Started](https://github.com/tom-tagmdl/asset_intellgence/wiki/Getting-Started)
+- 👉 [System Flow Overview](https://github.com/tom-tagmdl/asset_intellgence/wiki/System-Flow-Overview)
 
 ---
 
@@ -71,79 +71,7 @@ Asset Intelligence introduces a simple, powerful model:
 
 ---
 
-## 🔄 How It Works](https://github.com/user-attachments/assets/b3dd3107-7fea-4daa-8ec1-8ce304e6b985
-
-# Asset Intelligence
-
-**What if your home didn’t just monitor conditions… but understood what those conditions affect?**
-
-Asset Intelligence extends Home Assistant with a new concept:
-
-👉 **Assets** — the things your home exists to support, protect, and preserve
-
-This transforms your home from:
-
-> monitoring devices  
-into  
-> **understanding what matters**
-
----
-
-## 🚀 Start Here
-
-To understand how the system works:
-
-- 👉 ../../wiki/Concepts
-- 👉 ../../wiki/Getting-Started
-- 👉 ../../wiki/System-Flow-Overview
-
----
-
-## ✨ At a Glance
-
-Asset Intelligence enables your home to:
-
-- Understand what it contains (assets as first-class entities)
-- Evaluate whether conditions are appropriate
-- Track custody, movement, and loan history
-- Maintain documents, provenance, and insurance records
-- Provide explainable risk and advisory insights
-- Support room-aware and audience-aware experiences
-
----
-
-## 🧠 The Missing Piece in Smart Homes
-
-Today’s smart homes answer:
-
-- “What is the temperature?”
-- “Is the light on?”
-- “Which device is in this room?”
-
-But not:
-
-- **“Are conditions appropriate for what’s here?”**
-- **“Is anything at risk?”**
-- **“Where is this, and who has it?”**
-- **“Do I have documentation for this?”**
-
-Asset Intelligence enables your home to answer those questions.
-
----
-
-## 🧩 The System Model
-
-Asset Intelligence introduces a simple, powerful model:
-
-- **Areas (Rooms)** → where things are  
-- **Assets (Devices)** → what exists  
-- **Labels** → what kind of things  
-- **Environment** → what’s happening  
-- **Risk & Advisory** → what it means  
-
----
-
-## 🔄 How It Works)
+## 🔄 How It Works
 
 Sensors → Environment → Evaluation → Risk → Advisory → Activity → Automation
 
@@ -153,8 +81,6 @@ Sensors → Environment → Evaluation → Risk → Advisory → Activity → Au
 - Advisory explains what matters  
 - Activity records what changed  
 - Automations (optional) take action  
-
-👉 See: ../../wiki/System-Flow-Overview
 
 ---
 
