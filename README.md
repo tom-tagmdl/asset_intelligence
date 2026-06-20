@@ -1,5 +1,7 @@
 <img width="1536" height="1024" alt="banner_light" src="https://github.com/user-attachments/assets/4cc5e06c-027b-4f5b-972a-d35df0e19410" />
 
+## How It Works
+<img width="1548" height="1016" alt="SystemFlowOverview" src="https://github.com/user-attachments/assets/e8593294-1d22-4d0a-9de8-dc332c88c792" />
 
 # Asset Intelligence
 
