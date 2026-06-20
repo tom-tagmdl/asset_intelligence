@@ -1,4 +1,4 @@
-<img width="1536" height="1024" alt="banner_light" src="https://github.com/user-attachments/assets/4cc5e06c-027b-4f5b-972a-d35df0e19410" />
+[<img width="1536" height="1024" alt="banner_light" src="https://github.com/user-attachments/assets/4cc5e06c-027b-4f5b-972a-d35df0e19410" />
 
 
 # Asset Intelligence
@@ -71,7 +71,79 @@ Asset Intelligence introduces a simple, powerful model:
 
 ---
 
-## 🔄 How It Works
+## 🔄 How It Works](https://github.com/user-attachments/assets/b3dd3107-7fea-4daa-8ec1-8ce304e6b985
+
+# Asset Intelligence
+
+**What if your home didn’t just monitor conditions… but understood what those conditions affect?**
+
+Asset Intelligence extends Home Assistant with a new concept:
+
+👉 **Assets** — the things your home exists to support, protect, and preserve
+
+This transforms your home from:
+
+> monitoring devices  
+into  
+> **understanding what matters**
+
+---
+
+## 🚀 Start Here
+
+To understand how the system works:
+
+- 👉 ../../wiki/Concepts
+- 👉 ../../wiki/Getting-Started
+- 👉 ../../wiki/System-Flow-Overview
+
+---
+
+## ✨ At a Glance
+
+Asset Intelligence enables your home to:
+
+- Understand what it contains (assets as first-class entities)
+- Evaluate whether conditions are appropriate
+- Track custody, movement, and loan history
+- Maintain documents, provenance, and insurance records
+- Provide explainable risk and advisory insights
+- Support room-aware and audience-aware experiences
+
+---
+
+## 🧠 The Missing Piece in Smart Homes
+
+Today’s smart homes answer:
+
+- “What is the temperature?”
+- “Is the light on?”
+- “Which device is in this room?”
+
+But not:
+
+- **“Are conditions appropriate for what’s here?”**
+- **“Is anything at risk?”**
+- **“Where is this, and who has it?”**
+- **“Do I have documentation for this?”**
+
+Asset Intelligence enables your home to answer those questions.
+
+---
+
+## 🧩 The System Model
+
+Asset Intelligence introduces a simple, powerful model:
+
+- **Areas (Rooms)** → where things are  
+- **Assets (Devices)** → what exists  
+- **Labels** → what kind of things  
+- **Environment** → what’s happening  
+- **Risk & Advisory** → what it means  
+
+---
+
+## 🔄 How It Works)
 
 Sensors → Environment → Evaluation → Risk → Advisory → Activity → Automation
 
