@@ -1,0 +1,13 @@
+rules:
+  action-setup: done
+  brands: done
+  config-flow: done
+  runtime-data: done
+  docs-high-level-description: done
+  docs-installation-instructions: done
+  docs-removal-instructions: done
+  docs-actions: done
+  config-flow-test-coverage: done
+  test-before-configure: done
+  test-before-setup: done
+  unique-config-entry: done

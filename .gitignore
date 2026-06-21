@@ -36,3 +36,4 @@ ha_run.lock
 # YAML (exclude HA runtime, allow integration config)
 *.yaml
 !services.yaml
+!quality_scale.yaml
