@@ -268,3 +268,54 @@ Asset Intelligence transforms Home Assistant into:
 The result:
 
 > **A home that behaves with intention.**
+
+---
+
+## Repository Structure
+
+| Path | Purpose |
+|------|---------|
+| `__init__.py` | Integration entry point. Registers all services, sets up config entries, and wires the coordinator, storage, and document view into HA. |
+| `manifest.json` | HA integration metadata: domain, version, config flow flag, IoT class, and codeowner declaration. |
+| `quality_scale.yaml` | Tracks which Home Assistant Quality Scale rules have been satisfied for Bronze → Platinum progression. |
+| `const.py` | Shared constants used across the integration (domain name, signal names, service names). |
+| `models.py` | Core data models: `Asset`, `CustodyRecord`, `LoanRecord`, and supporting types. |
+| `coordinator.py` | `AssetIntelligenceCoordinator` — owns the runtime state, triggers refreshes, and dispatches change signals to entities. |
+| `asset_entity.py` | Base entity class shared by sensors and binary sensors; resolves the asset from coordinator data. |
+| `sensor.py` | Sensor entities: asset count, asset list, room environment readings. |
+| `binary_sensor.py` | Binary sensor entities: risk state and advisory flags per asset. |
+| `config_flow.py` | UI-driven config flow for setting up and reconfiguring the integration. |
+| `storage.py` | `AssetStore` — reads and writes asset data to HA's persistent JSON storage. |
+| `document_models.py` | Data classes for document records (receipts, appraisals, manuals, provenance). |
+| `document_storage.py` | `DocumentStorage` — manages file-level operations for linked asset documents on NAS/share. |
+| `environment.py` | Parses and normalises room environment sensor data into structured readings. |
+| `evaluation.py` | Evaluates environmental conditions against per-asset requirements to produce risk states. |
+| `advisory.py` | Generates human-readable advisory text from evaluation results. |
+| `validation.py` | Input validation helpers used by service handlers to reject malformed payloads early. |
+| `panel.py` | Registers the custom frontend panel with HA's HTTP layer. |
+| `strings.json` | Translatable UI strings for the config flow and services. |
+| `services.yaml` | HA service schema declarations (fields, descriptions) for all registered services. |
+| `translations/en.json` | English translations for config flow, services, and entity states. |
+| `helpers/document_resolver.py` | Resolves document paths and validates file availability against configured storage. |
+| `services/document_retrieval.py` | Service handler for document fetch/download operations. |
+| `frontend/panel_v5.js` | Compiled frontend panel served to the HA UI for asset management views. |
+| `frontend/src/` | Source for the frontend panel (components, pages, views). |
+| `docs/asset_intelligence.md` | End-user documentation: concepts, installation, removal, and supported actions. |
+| `docs/asset_intelligence_examples.md` | Usage examples and automation patterns for common asset intelligence scenarios. |
+| `docs/asset_intelligence_troubleshooting.md` | Troubleshooting guide for common setup and runtime issues. |
+| `docs/quality_scale_audit.md` | Platinum audit log: evidence mapping for each Quality Scale requirement. |
+| `brand/` | Integration branding assets (icons, banners, logos) for the HA brand registry. |
+| `tests/conftest.py` | Shared pytest fixtures for all test modules. |
+| `tests/test_config_flow.py` | Tests for UI config flow: setup, validation, and single-entry enforcement. |
+| `tests/test_setup.py` | Tests for integration startup and platform loading. |
+| `tests/test_unload.py` | Tests for config entry unloading and resource cleanup. |
+| `tests/test_services.py` | Tests for service handlers: document upload, attach, delete, and asset mutations. |
+| `tests/test_documents.py` | Unit tests for document record helpers and rebuild logic. |
+| `tests/test_history.py` | Tests for asset history payload construction. |
+| `tests/test_diagnostics.py` | Tests for the HA diagnostics payload output. |
+| `tests/test_entity_metadata.py` | Tests for sensor and binary sensor entity metadata (name, unique ID, device class). |
+| `tests/test_validation.py` | Tests for input validation helpers. |
+| `tests/run_quality_gate.ps1` | PowerShell script that runs the full pytest suite with coverage gate (≥85%) and emits artifacts. |
+| `tests/run_smoke_tests.ps1` | Lightweight smoke run targeting the most critical service tests only. |
+| `tests/_validate_services.py` | Standalone script to validate `services.yaml` schema against registered service definitions. |
+| `QUALITY_SCALE_CHECKLIST.md` | Working checklist tracking Bronze → Platinum progress with phase-by-phase implementation plan. |
