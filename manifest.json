@@ -6,5 +6,10 @@
   "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
   "iot_class": "local_polling",
   "config_flow": true,
-  "codeowners": ["@tom-tagmdl"]
+  "integration_type": "hub",
+  "homeassistant": "2024.1.0",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@tom-tagmdl"],
+  "loggers": ["custom_components.asset_intelligence"]
 }
