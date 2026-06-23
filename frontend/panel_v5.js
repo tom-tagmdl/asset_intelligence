@@ -44,7 +44,7 @@ globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS = PHYSICAL_DOCUMENT_LOCATIONS;
 var MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES || (3 * 1024 * 1024);
 globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
 
-class AssetIntelligenceApp extends HTMLElement {
+var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelligenceApp extends HTMLElement {
   constructor() {
     super();
     this._view = { type: "home" };
@@ -69,6 +69,9 @@ class AssetIntelligenceApp extends HTMLElement {
     this._assetHistoryFilter = "all";
     this._assetHistoryCache = {};
     this._assetHistoryLoading = {};
+    this._roomHistoryFilterByRoom = {};
+    this._roomHistoryAssetFilterByRoom = {};
+    this._measurementTicker = null;
     // ✅ Cache for authenticated protected image blob URLs
     this._protectedImageBlobCache = {};
 
@@ -116,6 +119,12 @@ class AssetIntelligenceApp extends HTMLElement {
     if (super.disconnectedCallback) super.disconnectedCallback();
     try { if (this._docStorageEventUnsub) this._docStorageEventUnsub(); } catch (e) {}
     try { if (this._labelRegistryEventUnsub) this._labelRegistryEventUnsub(); } catch (e) {}
+    try {
+      if (this._measurementTicker) {
+        clearInterval(this._measurementTicker);
+        this._measurementTicker = null;
+      }
+    } catch (e) {}
     try { document.removeEventListener("show-dialog", this._boundShowDialogHandler); } catch (e) {}
     try { window.removeEventListener("beforeunload", this._boundBeforeUnloadHandler); } catch (e) {}
     // Clean up blob URLs
@@ -1738,8 +1747,58 @@ class AssetIntelligenceApp extends HTMLElement {
 
         .ai-asset-header-actions {
           display: flex;
-          align-items: flex-start;
+          flex-direction: column;
+          align-items: flex-end;
           gap: 10px;
+        }
+
+        .ai-measurement-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          background: var(--primary-color, #03a9f4);
+          color: #fff;
+          border-radius: 12px;
+          padding: 8px 10px;
+          min-height: 40px;
+          box-shadow: 0 3px 10px rgba(3, 169, 244, 0.35);
+        }
+
+        .ai-measurement-elapsed {
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.03em;
+          white-space: nowrap;
+        }
+
+        .ai-measurement-count {
+          font-size: 12px;
+          font-weight: 600;
+          opacity: 0.95;
+          white-space: nowrap;
+        }
+
+        .ai-measurement-stop {
+          appearance: none;
+          border: 1px solid rgba(255, 255, 255, 0.45);
+          border-radius: 999px;
+          width: 30px;
+          height: 30px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(255, 255, 255, 0.17);
+          color: #fff;
+          cursor: pointer;
+        }
+
+        .ai-measurement-stop:hover {
+          background: rgba(255, 255, 255, 0.24);
+        }
+
+        .ai-measurement-stop ha-icon {
+          width: 18px;
+          height: 18px;
         }
 
         .ai-secondary-button {
@@ -1855,6 +1914,13 @@ class AssetIntelligenceApp extends HTMLElement {
           align-items: start;
         }
 
+        .ai-room-layout {
+          display: grid;
+          grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+          gap: 18px;
+          align-items: start;
+        }
+
         .ai-column {
           display: flex;
           flex-direction: column;
@@ -1885,6 +1951,55 @@ class AssetIntelligenceApp extends HTMLElement {
           );
           opacity: 0.32;
           pointer-events: none;
+        }
+
+        .ai-room-shell .ai-panel-card {
+          border: var(--ha-card-border-width, 1px) solid var(--ha-card-border-color, var(--divider-color));
+          border-radius: 14px;
+          background: var(--ha-card-background, var(--card-background-color));
+          box-shadow: var(--ha-card-box-shadow, 0 1px 3px rgba(0,0,0,0.2));
+          position: relative;
+          overflow: hidden;
+        }
+
+        .ai-room-shell .ai-panel-card::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          right: 0;
+          top: 0;
+          height: 3px;
+          background: linear-gradient(
+            90deg,
+            color-mix(in srgb, var(--primary-color) 82%, white 18%) 0%,
+            color-mix(in srgb, var(--primary-color) 40%, transparent 60%) 100%
+          );
+          opacity: 0.32;
+          pointer-events: none;
+        }
+
+        .ai-room-shell .ai-panel-body {
+          padding: 18px;
+        }
+
+        .ai-room-shell .ai-panel-title-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 10px;
+        }
+
+        .ai-room-shell .ai-panel-title {
+          font-size: 1.02rem;
+          font-weight: 700;
+          color: var(--primary-text-color);
+        }
+
+        .ai-room-shell .ai-panel-subtitle {
+          font-size: 12px;
+          color: var(--secondary-text-color);
+          margin-top: 2px;
         }
 
         .ai-asset-shell .ai-panel-body {
@@ -2528,6 +2643,10 @@ class AssetIntelligenceApp extends HTMLElement {
             grid-template-columns: 1fr;
           }
 
+          .ai-room-layout {
+            grid-template-columns: 1fr;
+          }
+
           .ai-asset-header-main {
             grid-template-columns: 80px 1fr;
           }
@@ -2653,6 +2772,9 @@ class AssetIntelligenceApp extends HTMLElement {
       }
       if (typeof this._enforceImageOverIconPrecedence === "function") {
         this._enforceImageOverIconPrecedence();
+      }
+      if (typeof this._syncMeasurementTimerUi === "function") {
+        this._syncMeasurementTimerUi();
       }
       if (this._view?.type === "asset-detail" && this._view?.assetId) {
         this._ensureAssetHistoryLoaded(this._view.assetId);
@@ -2846,6 +2968,39 @@ class AssetIntelligenceApp extends HTMLElement {
       const aAttrs = a.attributes || {};
       return this._resolveAssetRoomAreaId(aAttrs, a.entity_id) === roomId;
     });
+    const roomMeasurementHistoryAll = this._buildRoomMeasurementHistory(roomId, roomName, roomAssets);
+    const roomHistoryFilter = String(this._roomHistoryFilterByRoom?.[roomId] || "all").toLowerCase();
+    const roomHistoryAssetFilter = String(this._roomHistoryAssetFilterByRoom?.[roomId] || "all");
+    const roomAssetOptions = roomAssets
+      .map((assetEntity) => ({
+        asset_id: String(assetEntity?.attributes?.asset_id || "").trim(),
+        asset_name: this._displayAssetName(assetEntity),
+      }))
+      .filter((item) => !!item.asset_id)
+      .sort((a, b) => String(a.asset_name || "").localeCompare(String(b.asset_name || "")));
+
+    const roomMeasurementHistory = roomMeasurementHistoryAll.filter((entry) => {
+      const details = entry?.details && typeof entry.details === "object" ? entry.details : {};
+      const eventType = String(details.event_type || "").toLowerCase();
+      const entryAssetId = String(details.asset_id || "").trim();
+
+      if (roomHistoryFilter === "start" && eventType !== "start") return false;
+      if (roomHistoryFilter === "stop" && eventType !== "stop") return false;
+      if (roomHistoryFilter === "asset") {
+        if (roomHistoryAssetFilter && roomHistoryAssetFilter !== "all" && entryAssetId !== roomHistoryAssetFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+
+    const roomMeasurementSummary = this._buildRoomMeasurementSummary(
+      roomMeasurementHistoryAll,
+      roomAssets.length,
+    );
+
+    this._currentHistory = roomMeasurementHistory;
 
     const climate = attrs.climate || {};
     const light = attrs.light || {};
@@ -2983,23 +3138,217 @@ class AssetIntelligenceApp extends HTMLElement {
         </div>
       </div>
 
-      <div class="ai-section-label">
-        ${roomAssets.length === 1 ? "1 Asset in this room" : `${roomAssets.length} Assets in this room`}
-      </div>
+      <div class="ai-room-shell">
+        <div class="ai-room-layout">
+          <div class="ai-column">
+            <div class="ai-section-label">
+              ${roomAssets.length === 1 ? "1 Asset in this room" : `${roomAssets.length} Assets in this room`}
+            </div>
 
-      ${
-        roomAssets.length === 0
-          ? `<div class="ai-empty">No assets found in this room.</div>`
-          : `<div class="ai-grid">
-              ${roomAssets.map((a) => this._renderRoomAssetCard(a, roomName, room)).join("")}
-            </div>`
-      }
+            ${
+              roomAssets.length === 0
+                ? `<div class="ai-empty">No assets found in this room.</div>`
+                : `<div class="ai-grid">
+                    ${roomAssets.map((a) => this._renderRoomAssetCard(a, roomName, room)).join("")}
+                  </div>`
+            }
+          </div>
+
+          <div class="ai-column">
+            <div class="ai-panel-card">
+              <div class="ai-panel-body">
+                <div class="ai-panel-title-row">
+                  <div>
+                    <div class="ai-panel-title">Room Measurement History</div>
+                    <div class="ai-panel-subtitle">
+                      All room measurements across assets, newest first
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ai-readout-card" style="margin-bottom:12px;">
+                  <div class="ai-readout-grid">
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Session count</div>
+                      <div class="ai-readout-value">${roomMeasurementSummary.sessionCount}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Last session</div>
+                      <div class="ai-readout-value">${this._escapeHtml(roomMeasurementSummary.lastSessionAt)}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Avg observations / session</div>
+                      <div class="ai-readout-value">${this._escapeHtml(roomMeasurementSummary.avgObservationsText)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ai-timeline-filters">
+                  <button type="button" class="ai-filter-chip tone-neutral ${roomHistoryFilter === "all" ? "active" : ""}" data-room-history-filter="all" data-room-history-room="${this._escapeHtml(roomId)}">All</button>
+                  <button type="button" class="ai-filter-chip tone-neutral ${roomHistoryFilter === "start" ? "active" : ""}" data-room-history-filter="start" data-room-history-room="${this._escapeHtml(roomId)}">Start</button>
+                  <button type="button" class="ai-filter-chip tone-green ${roomHistoryFilter === "stop" ? "active" : ""}" data-room-history-filter="stop" data-room-history-room="${this._escapeHtml(roomId)}">Stop</button>
+                  <button type="button" class="ai-filter-chip tone-amber ${roomHistoryFilter === "asset" ? "active" : ""}" data-room-history-filter="asset" data-room-history-room="${this._escapeHtml(roomId)}">Asset</button>
+                </div>
+
+                ${roomHistoryFilter === "asset"
+                  ? `
+                    <div style="margin-bottom:12px;">
+                      <select class="ai-select" data-room-history-asset data-room-history-room="${this._escapeHtml(roomId)}" style="width:100%;">
+                        <option value="all" ${roomHistoryAssetFilter === "all" ? "selected" : ""}>All assets</option>
+                        ${roomAssetOptions.map((item) => `
+                          <option value="${this._escapeHtml(item.asset_id)}" ${roomHistoryAssetFilter === item.asset_id ? "selected" : ""}>
+                            ${this._escapeHtml(item.asset_name)}
+                          </option>
+                        `).join("")}
+                      </select>
+                    </div>
+                  `
+                  : ""
+                }
+
+                <div class="ai-timeline">
+                  ${roomMeasurementHistory.length
+                    ? roomMeasurementHistory.map((item, index) => `
+                      <div
+                        class="ai-timeline-item ${this._escapeHtml(item.color || "neutral")}" 
+                        data-history-kind="${this._escapeHtml(item.kind || "measurements")}" 
+                        data-history-index="${index}"
+                        title="Click to view details"
+                      >
+                        <div class="ai-timeline-meta">
+                          ${this._escapeHtml(item.meta || "")}
+                        </div>
+                        <div class="ai-timeline-title">
+                          ${this._escapeHtml(item.title || "Measurement event")}
+                        </div>
+                        ${item.copy ? `<div class="ai-timeline-copy">${this._escapeHtml(item.copy)}</div>` : ""}
+                      </div>
+                    `).join("")
+                    : `<div class="ai-empty">No completed measurement history for this room yet.</div>`
+                  }
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <button class="ai-fab" title="Add new asset">
         <span style="font-size:18px; line-height:1;">+</span>
         <span>Add Asset</span>
       </button>
     `;
+  }
+
+  _buildRoomMeasurementHistory(roomId, roomName, roomAssets) {
+    const normalizedRoomId = String(roomId || "").trim();
+    if (!normalizedRoomId || !Array.isArray(roomAssets) || !roomAssets.length) {
+      return [];
+    }
+
+    const entries = [];
+
+    roomAssets.forEach((assetEntity) => {
+      const attrs = assetEntity?.attributes || {};
+      const auditLog = Array.isArray(attrs.audit_log) ? attrs.audit_log : [];
+      if (!auditLog.length) return;
+
+      const assetId = String(attrs.asset_id || "").trim();
+      const assetName = this._displayAssetName(assetEntity);
+
+      auditLog.forEach((evt) => {
+        if (!evt || typeof evt !== "object") return;
+
+        const rawAction = String(evt.action || evt.message || "").trim();
+        if (!rawAction) return;
+
+        const action = rawAction.toLowerCase();
+        if (!action.includes("measurement")) return;
+
+        const details = evt.details && typeof evt.details === "object" ? evt.details : {};
+        const detailRoomId = String(
+          details.room_area_id || details.room_id || details.area_id || ""
+        ).trim();
+
+        if (detailRoomId && detailRoomId !== normalizedRoomId) {
+          return;
+        }
+
+        const timestampValue = String(
+          evt.timestamp || evt.occurred_at || evt.effective_at || details.completed_at || details.started_at || ""
+        ).trim();
+
+        const parsedTs = new Date(timestampValue).getTime();
+        const ts = Number.isFinite(parsedTs) ? parsedTs : 0;
+        const actor = String(evt.actor || evt.user || "").trim();
+        const observationCount = Number(details.observation_count ?? NaN);
+        const hasObservationCount = Number.isFinite(observationCount) && observationCount >= 0;
+
+        const isStopMeasurement = action.includes("stop_measurement") || action.includes("measurement_stop");
+        const title = isStopMeasurement
+          ? `Stop Measurement - ${assetName}`
+          : `Start Measurement - ${assetName}`;
+
+        const copyParts = [];
+        if (actor) {
+          copyParts.push(`By ${actor}`);
+        }
+        if (hasObservationCount) {
+          copyParts.push(`${Math.trunc(observationCount)} observations`);
+        }
+
+        entries.push({
+          kind: "measurements",
+          color: isStopMeasurement ? "green" : "neutral",
+          source: "audit",
+          title,
+          meta: this._formatLocalDateTime(timestampValue),
+          copy: copyParts.join(" • "),
+          details: {
+            event_type: isStopMeasurement ? "stop" : "start",
+            room_id: normalizedRoomId,
+            room_name: roomName,
+            asset_id: assetId,
+            asset_name: assetName,
+            action: rawAction,
+            ...(details && typeof details === "object" ? details : {}),
+          },
+          _ts: ts,
+        });
+      });
+    });
+
+    return entries.sort((a, b) => Number(b._ts || 0) - Number(a._ts || 0));
+  }
+
+  _buildRoomMeasurementSummary(historyItems, roomAssetCount = 0) {
+    const history = Array.isArray(historyItems) ? historyItems : [];
+    const completedSessions = history.filter((entry) => {
+      const details = entry?.details && typeof entry.details === "object" ? entry.details : {};
+      return String(details.event_type || "").toLowerCase() === "stop";
+    });
+
+    const sessionCount = completedSessions.length;
+    const lastSessionTs = completedSessions.length
+      ? Math.max(...completedSessions.map((entry) => Number(entry?._ts || 0)))
+      : 0;
+    const lastSessionAt = lastSessionTs > 0
+      ? this._formatLocalDateTime(new Date(lastSessionTs).toISOString())
+      : "—";
+
+    const observationValues = completedSessions
+      .map((entry) => Number(entry?.details?.observation_count ?? NaN))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    const avgObservations = observationValues.length
+      ? (observationValues.reduce((sum, value) => sum + value, 0) / observationValues.length)
+      : null;
+
+    return {
+      roomAssetCount: Number.isFinite(Number(roomAssetCount)) ? Number(roomAssetCount) : 0,
+      sessionCount,
+      lastSessionAt,
+      avgObservationsText: avgObservations === null ? "—" : String(Math.round(avgObservations * 10) / 10),
+    };
   }
 
   _initializeAssetDetailPickers() {
@@ -4562,6 +4911,19 @@ class AssetIntelligenceApp extends HTMLElement {
     const primaryAdvisoryText = String(attrs.primary_advisory || "").trim() || "None";
     const primaryMessageText = String(attrs.primary_advisory_message || "").trim() || "No advisory message";
     const exposureRiskView = this._normalizeExposureRisk(attrs.exposure_risk);
+    const activeMeasurement = attrs.active_measurement && typeof attrs.active_measurement === "object"
+      ? attrs.active_measurement
+      : null;
+    const measurementStartedAt = String(activeMeasurement?.started_at || "").trim();
+    const measurementIsActive = !!measurementStartedAt && !activeMeasurement?.completed;
+    const measurementUpdateCount = Number(
+      activeMeasurement?.update_count
+      ?? (Array.isArray(activeMeasurement?.observations) ? activeMeasurement.observations.length : 0)
+      ?? 0
+    );
+    const measurementElapsed = measurementStartedAt
+      ? this._formatMeasurementElapsed(measurementStartedAt)
+      : "00:00:00";
 
     return `
       ${this._renderBreadcrumb(breadcrumbItems)}
@@ -4612,6 +4974,27 @@ class AssetIntelligenceApp extends HTMLElement {
             </div>
 
             <div class="ai-asset-header-actions">
+              ${measurementIsActive
+                ? `
+                  <div
+                    class="ai-measurement-pill"
+                    data-measurement-started-at="${this._escapeHtml(measurementStartedAt)}"
+                  >
+                    <span class="ai-measurement-elapsed" data-measurement-elapsed>${this._escapeHtml(measurementElapsed)}</span>
+                    <span class="ai-measurement-count">Updates: ${Number.isFinite(measurementUpdateCount) ? measurementUpdateCount : 0}</span>
+                    <button
+                      class="ai-measurement-stop"
+                      type="button"
+                      title="Stop measurement"
+                      data-asset-stop-measure="${this._escapeHtml(assetId)}"
+                    >
+                      <ha-icon icon="mdi:stop"></ha-icon>
+                    </button>
+                  </div>
+                `
+                : ""
+              }
+
               <div class="ai-inline-actions" data-asset-header-actions style="display:none; margin-top:0;">
                 <button
                   class="ai-primary-button"
@@ -4635,12 +5018,24 @@ class AssetIntelligenceApp extends HTMLElement {
                   ⋮
                 </button>
                 <div class="ai-overflow-menu">
-                  <button
-                    class="ai-overflow-item"
-                    data-asset-measure="${this._escapeHtml(assetId)}"
-                  >
-                    Start measurement
-                  </button>
+                  ${measurementIsActive
+                    ? `
+                      <button
+                        class="ai-overflow-item"
+                        data-asset-stop-measure="${this._escapeHtml(assetId)}"
+                      >
+                        Stop measurement
+                      </button>
+                    `
+                    : `
+                      <button
+                        class="ai-overflow-item"
+                        data-asset-measure="${this._escapeHtml(assetId)}"
+                      >
+                        Start measurement
+                      </button>
+                    `
+                  }
                   <button
                     class="ai-overflow-item"
                     data-asset-export="${this._escapeHtml(assetId)}"
@@ -6819,6 +7214,39 @@ _getAssetTimelineItems(attrs) {
       };
     });
 
+    this.querySelectorAll("[data-room-history-filter]").forEach((el) => {
+      el.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const roomId = String(el.getAttribute("data-room-history-room") || "").trim();
+        if (!roomId) return;
+
+        const nextFilter = String(el.getAttribute("data-room-history-filter") || "all").toLowerCase();
+        this._roomHistoryFilterByRoom[roomId] = nextFilter || "all";
+
+        if (nextFilter !== "asset") {
+          this._roomHistoryAssetFilterByRoom[roomId] = "all";
+        }
+
+        this._render();
+      };
+    });
+
+    this.querySelectorAll("[data-room-history-asset]").forEach((el) => {
+      el.onchange = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const roomId = String(el.getAttribute("data-room-history-room") || "").trim();
+        if (!roomId) return;
+
+        const nextAssetId = String(e?.target?.value || "all").trim() || "all";
+        this._roomHistoryFilterByRoom[roomId] = "asset";
+        this._roomHistoryAssetFilterByRoom[roomId] = nextAssetId;
+        this._render();
+      };
+    });
+
     this.querySelectorAll("[data-custody-action]").forEach((el) => {
       el.onclick = (e) => {
         e.preventDefault();
@@ -6963,6 +7391,46 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const parent = btn.closest(".ai-overflow");
         parent.classList.toggle("open");
+      };
+    });
+
+    this.querySelectorAll("[data-asset-measure]").forEach((el) => {
+      el.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const assetId = String(el.getAttribute("data-asset-measure") || "").trim();
+        if (!assetId) return;
+
+        try {
+          await this._callService("asset_intelligence", "start_measurement", { asset_id: assetId });
+          await this._load();
+          await this._ensureAssetHistoryLoaded(assetId, true);
+          this._render();
+        } catch (err) {
+          console.error("Failed to start measurement", err);
+          alert("Failed to start measurement");
+        }
+      };
+    });
+
+    this.querySelectorAll("[data-asset-stop-measure]").forEach((el) => {
+      el.onclick = async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const assetId = String(el.getAttribute("data-asset-stop-measure") || "").trim();
+        if (!assetId) return;
+
+        try {
+          await this._callService("asset_intelligence", "stop_measurement", { asset_id: assetId });
+          await this._load();
+          await this._ensureAssetHistoryLoaded(assetId, true);
+          this._render();
+        } catch (err) {
+          console.error("Failed to stop measurement", err);
+          alert("Failed to stop measurement");
+        }
       };
     });
 
@@ -7702,6 +8170,50 @@ _getAssetTimelineItems(attrs) {
     if (value === null || value === undefined || value === "") return "—";
     if (typeof value === "object") return this._escapeHtml(JSON.stringify(value));
     return this._escapeHtml(String(value));
+  }
+
+  _formatMeasurementElapsed(startedAt) {
+    if (!startedAt) return "00:00:00";
+    const parsed = Date.parse(String(startedAt));
+    if (Number.isNaN(parsed)) return "00:00:00";
+
+    const elapsedMs = Math.max(0, Date.now() - parsed);
+    const elapsedSeconds = Math.floor(elapsedMs / 1000);
+    const hours = Math.floor(elapsedSeconds / 3600);
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    const seconds = elapsedSeconds % 60;
+
+    const hh = String(hours).padStart(2, "0");
+    const mm = String(minutes).padStart(2, "0");
+    const ss = String(seconds).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  }
+
+  _syncMeasurementTimerUi() {
+    const timerNodes = Array.from(this.querySelectorAll("[data-measurement-started-at]"));
+
+    if (!timerNodes.length) {
+      if (this._measurementTicker) {
+        clearInterval(this._measurementTicker);
+        this._measurementTicker = null;
+      }
+      return;
+    }
+
+    const updateTimerLabels = () => {
+      timerNodes.forEach((node) => {
+        const startedAt = node.getAttribute("data-measurement-started-at") || "";
+        const elapsedEl = node.querySelector("[data-measurement-elapsed]");
+        if (elapsedEl) {
+          elapsedEl.textContent = this._formatMeasurementElapsed(startedAt);
+        }
+      });
+    };
+
+    updateTimerLabels();
+    if (!this._measurementTicker) {
+      this._measurementTicker = setInterval(updateTimerLabels, 1000);
+    }
   }
 
   _getEntityRegistryEntry(entityId) {
@@ -9576,6 +10088,7 @@ _getAssetTimelineItems(attrs) {
         key !== "title"
         && key !== "message"
         && key !== "summary"
+        && key !== "profile"
         && key !== "field_changes"
         && key !== "changed_fields"
         && key !== "environment_requirements"
@@ -9608,6 +10121,7 @@ _getAssetTimelineItems(attrs) {
       : "";
 
     const fieldChangesHtml = this._renderActivityFieldChanges(normalizedFieldChanges);
+    const measurementProfileHtml = this._renderMeasurementProfile(details?.profile);
 
     const hasChangeSections = !!changedFields.length || !!fieldChangesHtml;
 
@@ -9636,6 +10150,7 @@ _getAssetTimelineItems(attrs) {
           ${rowsHtml}
         </div>
         ${changedFieldsHtml}
+        ${measurementProfileHtml}
         ${fieldChangesHtml
           ? `
             <div style="margin-top:12px; font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.04em;">Field changes</div>
@@ -9660,6 +10175,106 @@ _getAssetTimelineItems(attrs) {
 
     dialog.querySelector('[data-action="close"]')?.addEventListener("click", close);
     dialog.addEventListener("closed", close);
+  }
+
+  _renderMeasurementProfile(profile) {
+    if (!profile || typeof profile !== "object") {
+      return "";
+    }
+
+    const baseline = profile.baseline && typeof profile.baseline === "object"
+      ? profile.baseline
+      : {};
+    const metrics = Array.isArray(profile.metrics)
+      ? profile.metrics
+      : [];
+
+    const observationPeriod = Number(baseline.observation_period || 0);
+    const formatDuration = (seconds) => {
+      if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+      const total = Math.floor(seconds);
+      const hh = String(Math.floor(total / 3600)).padStart(2, "0");
+      const mm = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+      const ss = String(total % 60).padStart(2, "0");
+      return `${hh}:${mm}:${ss}`;
+    };
+
+    const baselineRows = [
+      ["Observation count", baseline.observation_count],
+      ["Observation start", baseline.observation_start ? this._formatLocalDateTime(baseline.observation_start) : "—"],
+      ["Observation end", baseline.observation_end ? this._formatLocalDateTime(baseline.observation_end) : "—"],
+      ["Observation period", formatDuration(observationPeriod)],
+      ["Confidence", baseline.confidence || "—"],
+    ];
+
+    if (baseline.avg_temperature !== undefined && baseline.avg_temperature !== null) {
+      baselineRows.push(["Average temperature", baseline.avg_temperature]);
+    }
+    if (baseline.avg_humidity !== undefined && baseline.avg_humidity !== null) {
+      baselineRows.push(["Average humidity", baseline.avg_humidity]);
+    }
+    if (baseline.avg_lux !== undefined && baseline.avg_lux !== null) {
+      baselineRows.push(["Average lux", baseline.avg_lux]);
+    }
+    if (baseline.avg_uv !== undefined && baseline.avg_uv !== null) {
+      baselineRows.push(["Average UV", baseline.avg_uv]);
+    }
+
+    const baselineHtml = baselineRows
+      .map(([label, value]) => `
+        <div style="display:grid; grid-template-columns: 180px minmax(0,1fr); gap:10px; padding:7px 0; border-bottom:1px solid rgba(0,0,0,0.06);">
+          <div style="font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.03em;">${this._escapeHtml(String(label))}</div>
+          <div style="font-size:14px; color:var(--primary-text-color);">${this._escapeHtml(String(value ?? "—"))}</div>
+        </div>
+      `)
+      .join("");
+
+    const metricRows = metrics
+      .slice(0, 120)
+      .map((metric) => {
+        if (!metric || typeof metric !== "object") return "";
+        const name = String(metric.name || metric.key || "Metric");
+        const unit = metric.unit ? String(metric.unit) : "";
+        const avg = metric.avg ?? "—";
+        const min = metric.min ?? "—";
+        const max = metric.max ?? "—";
+        const last = metric.last ?? "—";
+        const samples = metric.samples ?? "—";
+        const suffix = unit ? ` ${unit}` : "";
+        return `
+          <div style="padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
+            <div style="font-size:13px; font-weight:700; color:var(--primary-text-color); margin-bottom:4px;">${this._escapeHtml(name)}</div>
+            <div style="font-size:13px; color:var(--secondary-text-color); line-height:1.45;">
+              Average: <strong>${this._escapeHtml(String(avg))}${this._escapeHtml(suffix)}</strong>
+              • Min: ${this._escapeHtml(String(min))}${this._escapeHtml(suffix)}
+              • Max: ${this._escapeHtml(String(max))}${this._escapeHtml(suffix)}
+              • Last: ${this._escapeHtml(String(last))}${this._escapeHtml(suffix)}
+              • Samples: ${this._escapeHtml(String(samples))}
+            </div>
+          </div>
+        `;
+      })
+      .filter((row) => !!row)
+      .join("");
+
+    const sensorsUsed = Array.isArray(baseline.sensors_used) ? baseline.sensors_used : [];
+    const sensorsUsedHtml = sensorsUsed.length
+      ? `
+        <div style="margin-top:10px; font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.04em;">Sensors used</div>
+        <div style="margin-top:6px; border:1px solid var(--divider-color); border-radius:8px; padding:10px 12px;">
+          ${sensorsUsed.map((sensor) => `<div style="font-size:13px; color:var(--primary-text-color); line-height:1.45;">${this._escapeHtml(String(sensor))}</div>`).join("")}
+        </div>
+      `
+      : "";
+
+    return `
+      <div style="margin-top:12px; font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.04em;">Measurement profile</div>
+      <div style="margin-top:6px; border:1px solid var(--divider-color); border-radius:8px; padding:10px 12px;">
+        ${baselineHtml}
+        ${metricRows ? `<div style="margin-top:10px; font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.04em;">Metrics</div><div style="margin-top:6px;">${metricRows}</div>` : ""}
+      </div>
+      ${sensorsUsedHtml}
+    `;
   }
 
   _renderActivityDialogValue(value) {
@@ -10380,7 +10995,9 @@ _getAssetTimelineItems(attrs) {
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#39;");
   }
-}
+};
+
+globalThis.AssetIntelligenceApp = AssetIntelligenceApp;
 
 if (!customElements.get("asset-intelligence-app")) {
   customElements.define("asset-intelligence-app", AssetIntelligenceApp);

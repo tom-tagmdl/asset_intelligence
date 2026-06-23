@@ -451,7 +451,11 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         active_measurement.setdefault("started_at", None)
         active_measurement.setdefault("duration_days", None)
         active_measurement.setdefault("observations", [])
+        active_measurement.setdefault("update_count", 0)
         active_measurement.setdefault("last_observation_at", None)
+        active_measurement.setdefault("started_by", None)
+        active_measurement.setdefault("stop_requested_by", None)
+        active_measurement.setdefault("initial_room_environment", {})
         active_measurement.setdefault("stop_requested", False)
         active_measurement.setdefault("completed", False)
         asset["active_measurement"] = active_measurement
@@ -716,26 +720,16 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
                 "samples": [],
             },
         )
-        climate = room_environment.get("climate", {})
-        if not isinstance(climate, dict):
-            climate = {}
-        light = room_environment.get("light", {})
-        if not isinstance(light, dict):
-            light = {}
+        room_snapshot = self._snapshot_measurement_room_environment(room_environment)
+        asset_sensor_snapshot = self._collect_asset_sensor_snapshot(asset)
         observation = {
             "timestamp": cycle_timestamp,
-            "climate": {
-                "temperature": climate.get("temperature"),
-                "humidity": climate.get("humidity"),
-                "dew_point": climate.get("dew_point"),
-            },
-            "light": {
-                "lux": light.get("lux"),
-                "uv": light.get("uv"),
-            },
+            "room_environment": room_snapshot,
+            "asset_sensors": asset_sensor_snapshot,
         }
         runtime["samples"].append(observation)
         measurement.setdefault("observations", []).append(observation)
+        measurement["update_count"] = int(measurement.get("update_count") or 0) + 1
         measurement["last_observation_at"] = cycle_timestamp
         measurement_changed = True
         if measurement.get("stop_requested") and not measurement.get("completed"):
@@ -744,15 +738,51 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
                 asset=asset,
                 room_environment=room_environment,
             )
+            room_area_id = self._resolve_runtime_area_id(asset_id)
             asset["environment_profile"] = profile
             sessions = asset.setdefault("measurement_sessions", [])
             sessions.append(
                 {
                     "started_at": measurement.get("started_at"),
                     "completed_at": cycle_timestamp,
+                    "started_by": measurement.get("started_by"),
+                    "stop_requested_at": measurement.get("stop_requested_at"),
+                    "stop_requested_by": measurement.get("stop_requested_by"),
+                    "room_area_id": room_area_id,
+                    "observation_count": int(measurement.get("update_count") or 0),
+                    "initial_room_environment": measurement.get("initial_room_environment")
+                    if isinstance(measurement.get("initial_room_environment"), dict)
+                    else {},
+                    "profile": profile,
                     "profile_summary": profile.get("baseline", {}),
                 }
             )
+
+            audit_log = asset.get("audit_log")
+            if not isinstance(audit_log, list):
+                audit_log = []
+                asset["audit_log"] = audit_log
+            audit_log.append(
+                {
+                    "timestamp": cycle_timestamp,
+                    "action": "stop_measurement",
+                    "actor": measurement.get("stop_requested_by") or measurement.get("started_by") or "system",
+                    "details": {
+                        "started_at": measurement.get("started_at"),
+                        "completed_at": cycle_timestamp,
+                        "room_area_id": room_area_id,
+                        "observation_count": int(measurement.get("update_count") or 0),
+                        "last_observation_at": measurement.get("last_observation_at"),
+                        "initial_room_environment": measurement.get("initial_room_environment")
+                        if isinstance(measurement.get("initial_room_environment"), dict)
+                        else {},
+                        "profile": profile,
+                    },
+                }
+            )
+            if len(audit_log) > 200:
+                del audit_log[:-200]
+
             self.hass.bus.async_fire(
                 f"{DOMAIN}_environment_profile_completed",
                 {
@@ -781,48 +811,130 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         samples = runtime.get("samples", [])
         if not samples:
             return {"baseline": {}}
-        def _get_nested(sample: dict[str, Any], section: str, signal: str) -> Any:
-            section_value = sample.get(section)
-            if not isinstance(section_value, dict):
-                return None
-            return section_value.get(signal)
-        temps = [
-            _get_nested(sample, "climate", "temperature")
-            for sample in samples
-            if _get_nested(sample, "climate", "temperature") is not None
-        ]
-        humidities = [
-            _get_nested(sample, "climate", "humidity")
-            for sample in samples
-            if _get_nested(sample, "climate", "humidity") is not None
-        ]
-        lux_values = [
-            _get_nested(sample, "light", "lux")
-            for sample in samples
-            if _get_nested(sample, "light", "lux") is not None
-        ]
-        uv_values = [
-            _get_nested(sample, "light", "uv")
-            for sample in samples
-            if _get_nested(sample, "light", "uv") is not None
-        ]
+        numeric_series: dict[str, list[float]] = {}
+        units_by_key: dict[str, str | None] = {}
+        last_values_by_key: dict[str, float] = {}
+
+        for sample in samples:
+            if not isinstance(sample, dict):
+                continue
+
+            room_snapshot = sample.get("room_environment")
+            if isinstance(room_snapshot, dict):
+                for section, signal_map in room_snapshot.items():
+                    if not isinstance(signal_map, dict):
+                        continue
+                    for signal, raw_value in signal_map.items():
+                        numeric_value = self._coerce_numeric(raw_value)
+                        if numeric_value is None:
+                            continue
+                        metric_key = f"room.{section}.{signal}"
+                        numeric_series.setdefault(metric_key, []).append(numeric_value)
+                        last_values_by_key[metric_key] = numeric_value
+
+            asset_sensor_snapshot = sample.get("asset_sensors")
+            if isinstance(asset_sensor_snapshot, dict):
+                for entity_id, payload in asset_sensor_snapshot.items():
+                    if not isinstance(payload, dict):
+                        continue
+                    numeric_value = self._coerce_numeric(payload.get("value"))
+                    if numeric_value is None:
+                        continue
+                    metric_key = f"asset.{entity_id}"
+                    numeric_series.setdefault(metric_key, []).append(numeric_value)
+                    last_values_by_key[metric_key] = numeric_value
+                    unit_value = payload.get("unit")
+                    if unit_value not in (None, ""):
+                        units_by_key[metric_key] = str(unit_value)
+
+        room_units: dict[str, str] = {}
+        source_status = room_environment.get("source_status")
+        details = source_status.get("details") if isinstance(source_status, dict) else {}
+        if isinstance(details, dict):
+            for field_path, field_status in details.items():
+                if not isinstance(field_status, dict):
+                    continue
+                entity_id = field_status.get("entity_id")
+                if not entity_id:
+                    continue
+                state_obj = self.hass.states.get(str(entity_id))
+                if state_obj:
+                    unit = state_obj.attributes.get("unit_of_measurement")
+                    if unit not in (None, ""):
+                        room_units[str(field_path)] = str(unit)
+
+        metrics: list[dict[str, Any]] = []
+        for metric_key, values in sorted(numeric_series.items()):
+            if not values:
+                continue
+
+            source = "room"
+            display_name = metric_key
+            unit = units_by_key.get(metric_key)
+
+            if metric_key.startswith("room."):
+                suffix = metric_key[len("room."):]
+                parts = suffix.split(".")
+                if len(parts) >= 2:
+                    section = parts[0].replace("_", " ").title()
+                    signal = parts[1].replace("_", " ").title()
+                    display_name = f"{section} - {signal}"
+                unit = unit or room_units.get(suffix)
+            elif metric_key.startswith("asset."):
+                source = "asset"
+                entity_id = metric_key[len("asset."):]
+                state_obj = self.hass.states.get(entity_id)
+                friendly_name = state_obj.attributes.get("friendly_name") if state_obj else None
+                display_name = str(friendly_name or entity_id)
+                if unit in (None, "") and state_obj:
+                    unit = state_obj.attributes.get("unit_of_measurement")
+
+            metrics.append(
+                {
+                    "key": metric_key,
+                    "source": source,
+                    "name": display_name,
+                    "unit": unit,
+                    "avg": round(sum(values) / len(values), 2),
+                    "min": round(min(values), 2),
+                    "max": round(max(values), 2),
+                    "last": round(last_values_by_key.get(metric_key, values[-1]), 2),
+                    "samples": len(values),
+                }
+            )
+
         timestamps = [sample.get("timestamp") for sample in samples if sample.get("timestamp")]
-        def _avg(values: list[float]) -> float | None:
-            return round(sum(values) / len(values), 2) if values else None
-        def _max(values: list[float]) -> float | None:
-            return max(values) if values else None
+
+        sensors_used: list[str] = []
+        if isinstance(details, dict):
+            for field_path, field_status in details.items():
+                if not isinstance(field_status, dict):
+                    continue
+                if not field_status.get("configured"):
+                    continue
+                entity_id = field_status.get("entity_id")
+                if entity_id:
+                    sensors_used.append(f"room:{field_path} ({entity_id})")
+
+        links = asset.get("links") if isinstance(asset.get("links"), dict) else {}
+        linked_entity_ids = links.get("entity_ids") if isinstance(links, dict) else []
+        if isinstance(linked_entity_ids, list):
+            for entity_id in linked_entity_ids:
+                if isinstance(entity_id, str) and entity_id.strip():
+                    sensors_used.append(f"asset:{entity_id.strip()}")
+
         baseline = {
-            "avg_temperature": _avg(temps),
-            "avg_humidity": _avg(humidities),
-            "avg_lux": _avg(lux_values),
-            "peak_lux": _max(lux_values),
-            "avg_uv": _avg(uv_values),
-            "peak_uv": _max(uv_values),
+            "avg_temperature": next((m.get("avg") for m in metrics if m.get("key") == "room.climate.temperature"), None),
+            "avg_humidity": next((m.get("avg") for m in metrics if m.get("key") == "room.climate.humidity"), None),
+            "avg_lux": next((m.get("avg") for m in metrics if m.get("key") == "room.light.lux"), None),
+            "peak_lux": next((m.get("max") for m in metrics if m.get("key") == "room.light.lux"), None),
+            "avg_uv": next((m.get("avg") for m in metrics if m.get("key") == "room.light.uv"), None),
+            "peak_uv": next((m.get("max") for m in metrics if m.get("key") == "room.light.uv"), None),
             "observation_count": len(samples),
             "observation_start": timestamps[0] if timestamps else None,
             "observation_end": timestamps[-1] if timestamps else None,
             "observation_period": None,
-            "sensors_used": [],
+            "sensors_used": sorted(set(sensors_used)),
             "confidence": None,
         }
         if timestamps and len(timestamps) >= 2:
@@ -832,16 +944,6 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
                 baseline["observation_period"] = int((end - start).total_seconds())
             except Exception:
                 baseline["observation_period"] = None
-        sensors_used: list[str] = []
-        if temps:
-            sensors_used.append("climate.temperature")
-        if humidities:
-            sensors_used.append("climate.humidity")
-        if lux_values:
-            sensors_used.append("light.lux")
-        if uv_values:
-            sensors_used.append("light.uv")
-        baseline["sensors_used"] = sensors_used
         sample_count = len(samples)
         if sample_count >= 500:
             confidence = "HIGH"
@@ -859,7 +961,69 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         baseline["exposure_window"] = exposure_window
         return {
             "baseline": baseline,
+            "metrics": metrics,
         }
+
+    def _snapshot_measurement_room_environment(
+        self,
+        room_environment: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        if not isinstance(room_environment, dict):
+            return {}
+
+        sections = (
+            "climate",
+            "light",
+            "air_quality",
+            "particulates",
+            "biological",
+            "safety",
+            "structural",
+            "context",
+            "control_context",
+            "external_environment",
+        )
+        snapshot: dict[str, dict[str, Any]] = {}
+        for section in sections:
+            value = room_environment.get(section)
+            if isinstance(value, dict):
+                snapshot[section] = dict(value)
+        return snapshot
+
+    def _collect_asset_sensor_snapshot(
+        self,
+        asset: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        links = asset.get("links") if isinstance(asset.get("links"), dict) else {}
+        entity_ids = links.get("entity_ids") if isinstance(links, dict) else []
+        if not isinstance(entity_ids, list):
+            return {}
+
+        snapshot: dict[str, dict[str, Any]] = {}
+        for entity_id in entity_ids:
+            if not isinstance(entity_id, str) or not entity_id.strip():
+                continue
+
+            normalized_entity_id = entity_id.strip()
+            state_obj = self.hass.states.get(normalized_entity_id)
+            if state_obj is None:
+                continue
+
+            snapshot[normalized_entity_id] = {
+                "value": state_obj.state,
+                "unit": state_obj.attributes.get("unit_of_measurement"),
+                "device_class": state_obj.attributes.get("device_class"),
+            }
+
+        return snapshot
+
+    def _coerce_numeric(self, value: Any) -> float | None:
+        if value in (None, "", "unknown", "unavailable", "none"):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
     def _apply_runtime_side_effects(
         self,
         *,

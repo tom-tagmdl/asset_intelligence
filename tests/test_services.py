@@ -44,6 +44,12 @@ class FakeCoordinator:
         self.async_config_entry_first_refresh = AsyncMock()
         self.async_request_refresh = AsyncMock()
 
+    def get_asset_record(self, asset_id):
+        return self.store.get(asset_id)
+
+    def _utcnow_iso(self):
+        return "2026-06-23T00:00:00+00:00"
+
 
 class FakeDocumentStorage:
     def __init__(self, hass, config):
@@ -778,3 +784,76 @@ async def test_smoke_core_services_are_registered():
     assert "update_document_metadata" in service_handlers
     assert "delete_document" in service_handlers
     assert "get_asset_history" in service_handlers
+
+
+@pytest.mark.asyncio
+async def test_start_measurement_service_sets_active_measurement_and_audit_entry():
+    hass, entry, service_handlers, store, _ = _build_hass()
+    await _setup_integration(hass)
+
+    store.assets["asset_1"] = {
+        "asset_id": "asset_1",
+        "name": "Test asset",
+        "asset_type": "electronics",
+        "room_environment": {
+            "climate": {"temperature": 71.2, "humidity": 44.5},
+            "light": {"lux": 120},
+        },
+        "audit_log": [],
+    }
+
+    handler = service_handlers["start_measurement"]
+    call = SimpleNamespace(
+        data={
+            "asset_id": "asset_1",
+            "actor": "tester",
+        },
+        context=SimpleNamespace(user_id=None),
+    )
+
+    await handler(call)
+
+    active = store.assets["asset_1"]["active_measurement"]
+    assert active["started_at"] == "2026-06-23T00:00:00+00:00"
+    assert active["started_by"] == "tester"
+    assert active["update_count"] == 0
+    assert active["stop_requested"] is False
+    assert isinstance(active["initial_room_environment"], dict)
+    assert store.assets["asset_1"]["audit_log"][-1]["action"] == "start_measurement"
+    assert store.assets["asset_1"]["audit_log"][-1]["details"]["started_at"] == "2026-06-23T00:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_stop_measurement_service_marks_stop_request():
+    hass, entry, service_handlers, store, _ = _build_hass()
+    await _setup_integration(hass)
+
+    store.assets["asset_1"] = {
+        "asset_id": "asset_1",
+        "name": "Test asset",
+        "asset_type": "electronics",
+        "audit_log": [],
+        "active_measurement": {
+            "started_at": "2026-06-23T00:00:00+00:00",
+            "started_by": "tester",
+            "observations": [],
+            "update_count": 0,
+            "stop_requested": False,
+        },
+    }
+
+    handler = service_handlers["stop_measurement"]
+    call = SimpleNamespace(
+        data={
+            "asset_id": "asset_1",
+            "actor": "tester",
+        },
+        context=SimpleNamespace(user_id=None),
+    )
+
+    await handler(call)
+
+    active = store.assets["asset_1"]["active_measurement"]
+    assert active["stop_requested"] is True
+    assert active["stop_requested_at"] == "2026-06-23T00:00:00+00:00"
+    assert active["stop_requested_by"] == "tester"

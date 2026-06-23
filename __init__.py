@@ -66,6 +66,8 @@ REGISTERED_SERVICES: tuple[str, ...] = (
     "record_loan_out",
     "record_loan_in",
     "export_inventory",
+    "start_measurement",
+    "stop_measurement",
 )
 
 
@@ -822,6 +824,9 @@ def _history_action_categories(action: Any) -> list[str]:
     ]):
         categories.append("custody")
 
+    if "measurement" in action_text:
+        categories.append("measurements")
+
     return categories
 
 
@@ -846,6 +851,9 @@ def _history_kind_from_audit_action(action: Any) -> str:
         "record_loan_in",
     ]):
         return "custody"
+
+    if "measurement" in action_text:
+        return "measurements"
 
     return "audit"
 
@@ -3354,6 +3362,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # -----------------------------
     async def handle_start_measurement(call: ServiceCall) -> None:
         coordinator = _get_coordinator(hass)
+        actor = await _resolve_actor(hass, call)
 
         asset_id = call.data.get("asset_id")
         if not asset_id:
@@ -3367,15 +3376,26 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if not isinstance(measurement, dict):
             measurement = {}
 
+        room_area_id = coordinator._resolve_runtime_area_id(str(asset_id))
+
         now_iso = coordinator._utcnow_iso()
+        room_environment = asset.get("room_environment")
+        if isinstance(room_environment, dict):
+            initial_room_environment = json.loads(json.dumps(room_environment))
+        else:
+            initial_room_environment = {}
 
         measurement["started_at"] = now_iso
+        measurement["started_by"] = actor
         measurement["completed"] = False
         measurement["completed_at"] = None
         measurement["stop_requested"] = False
         measurement["stop_requested_at"] = None
+        measurement["stop_requested_by"] = None
         measurement["observations"] = []
+        measurement["update_count"] = 0
         measurement["last_observation_at"] = None
+        measurement["initial_room_environment"] = initial_room_environment
 
         # Optional sensor override support placeholder
         sensors = call.data.get("sensors")
@@ -3383,11 +3403,25 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
         asset["active_measurement"] = measurement
 
+        _append_audit(
+            asset,
+            "start_measurement",
+            actor,
+            {
+                "started_at": now_iso,
+                "room_area_id": room_area_id,
+                "initial_room_environment": initial_room_environment,
+                "observation_count": 0,
+                "sensors": measurement.get("sensors") if isinstance(measurement.get("sensors"), list) else [],
+            },
+        )
+
         await coordinator.store.async_save()
         await coordinator.async_request_refresh()
 
     async def handle_stop_measurement(call: ServiceCall) -> None:
         coordinator = _get_coordinator(hass)
+        actor = await _resolve_actor(hass, call)
 
         asset_id = call.data.get("asset_id")
         if not asset_id:
@@ -3405,6 +3439,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
         measurement["stop_requested"] = True
         measurement["stop_requested_at"] = now_iso
+        measurement["stop_requested_by"] = actor
 
         asset["active_measurement"] = measurement
 

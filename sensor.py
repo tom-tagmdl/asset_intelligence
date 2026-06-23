@@ -901,6 +901,36 @@ class AssetRecordEntity(_AssetCoordinatorBaseSensor):
         room_area_id: Any | None = self.projection.get("room_area_id")
         room_area_name: str | None = _resolve_area_name(self.hass, room_area_id)
         room_configured = bool(room_env.get("configured", False))
+        active_measurement_raw: Any | None = asset.get("active_measurement")
+        if isinstance(active_measurement_raw, dict):
+            measurement_observations: Any | None = active_measurement_raw.get("observations")
+            observation_count = (
+                len(measurement_observations)
+                if isinstance(measurement_observations, list)
+                else int(active_measurement_raw.get("update_count") or 0)
+            )
+            active_measurement = {
+                "started_at": active_measurement_raw.get("started_at"),
+                "started_by": active_measurement_raw.get("started_by"),
+                "stop_requested": bool(active_measurement_raw.get("stop_requested")),
+                "stop_requested_at": active_measurement_raw.get("stop_requested_at"),
+                "stop_requested_by": active_measurement_raw.get("stop_requested_by"),
+                "completed": bool(active_measurement_raw.get("completed")),
+                "completed_at": active_measurement_raw.get("completed_at"),
+                "last_observation_at": active_measurement_raw.get("last_observation_at"),
+                "update_count": int(active_measurement_raw.get("update_count") or observation_count),
+            }
+        else:
+            active_measurement = None
+
+        measurement_sessions_raw: Any | None = asset.get("measurement_sessions")
+        if isinstance(measurement_sessions_raw, list):
+            measurement_session_count = len(measurement_sessions_raw)
+            latest_measurement_session = measurement_sessions_raw[-1] if measurement_sessions_raw else None
+        else:
+            measurement_session_count = 0
+            latest_measurement_session = None
+
         # ✅ FIX: move these OUTSIDE dict
         _raw_docs: Any | None = asset.get("documents")
         _docs = _raw_docs if isinstance(_raw_docs, list) else []
@@ -989,5 +1019,8 @@ class AssetRecordEntity(_AssetCoordinatorBaseSensor):
             "environment_state_since": self.environment_state_since,
             "environment_event_count": asset.get("environment_event_count", 0),
             "last_environment_event": last_event,
+            "active_measurement": active_measurement,
+            "measurement_session_count": measurement_session_count,
+            "latest_measurement_session": latest_measurement_session,
         }
         return _compact_sensor_attributes_for_recorder(attrs)
