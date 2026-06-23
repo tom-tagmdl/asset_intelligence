@@ -1289,6 +1289,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # -----------------------------
     async def handle_delete_asset(call: ServiceCall) -> None:
         store = _get_store(hass)
+        document_storage = _get_document_storage(hass)
         actor = await _resolve_actor(hass, call)
 
         asset_id = call.data.get("asset_id")
@@ -1364,6 +1365,16 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if remaining_documents or remaining_physical_documents:
             raise HomeAssistantError(
                 "Unable to delete all attached documents before deleting asset"
+            )
+
+        # Best-effort cleanup of the asset's document folder after cascade deletion.
+        removed_asset_folder = await hass.async_add_executor_job(
+            lambda: document_storage.delete_asset_folder(asset_id=asset_key)
+        )
+        if not removed_asset_folder:
+            _LOGGER.debug(
+                "Asset Intelligence: no removable document folder for asset_id=%s",
+                asset_key,
             )
 
         # ---------------------------------------------------------

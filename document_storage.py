@@ -4,6 +4,7 @@ from typing import Any
 import hashlib
 import mimetypes
 import os
+import shutil
 import uuid
 
 from homeassistant.core import HomeAssistant
@@ -328,6 +329,48 @@ class DocumentStorage:
         return self.delete_document(
             provider_document_id=preview_provider_document_id,
         )
+
+    def delete_asset_folder(
+        self,
+        *,
+        asset_id: str,
+    ) -> bool:
+        """Delete an asset's storage folder and any remaining files under it."""
+        if not isinstance(asset_id, str):
+            return False
+
+        normalized_asset_id = asset_id.strip().replace("\\", "/").strip("/")
+        if (
+            not normalized_asset_id
+            or "/" in normalized_asset_id
+            or normalized_asset_id in {".", ".."}
+        ):
+            return False
+
+        if not self.root_path or not isinstance(self.root_path, str):
+            return False
+
+        root_real = os.path.realpath(os.path.abspath(self.root_path))
+        candidate = os.path.realpath(
+            os.path.abspath(os.path.join(self.root_path, normalized_asset_id))
+        )
+
+        try:
+            common = os.path.commonpath([root_real, candidate])
+        except ValueError:
+            return False
+
+        if common != root_real:
+            return False
+
+        if not os.path.isdir(candidate):
+            return False
+
+        try:
+            shutil.rmtree(candidate)
+            return True
+        except Exception:
+            return False
 
     # ---------------------------------------------------------
     # INTERNAL PATH / REFERENCE HELPERS

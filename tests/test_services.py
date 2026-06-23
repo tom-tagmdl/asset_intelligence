@@ -53,8 +53,10 @@ class FakeDocumentStorage:
         self.received_store_arguments = None
         self.received_delete_document_arguments = None
         self.received_delete_preview_arguments = None
+        self.received_delete_asset_folder_arguments = None
         self.delete_document_calls = []
         self.delete_preview_calls = []
+        self.delete_asset_folder_calls = []
 
     def is_available(self):
         return True
@@ -71,6 +73,13 @@ class FakeDocumentStorage:
             "preview_provider_document_id": preview_provider_document_id,
         }
         self.delete_preview_calls.append(self.received_delete_preview_arguments)
+        return True
+
+    def delete_asset_folder(self, *, asset_id=None):
+        self.received_delete_asset_folder_arguments = {
+            "asset_id": asset_id,
+        }
+        self.delete_asset_folder_calls.append(self.received_delete_asset_folder_arguments)
         return True
 
     def store_document(
@@ -755,6 +764,7 @@ async def test_delete_asset_service_deletes_attached_documents_then_asset():
         {"provider_document_id": "asset_1/doc-1_warranty.pdf"},
         {"provider_document_id": "asset_1/doc-2_manual.pdf"},
     ]
+    assert document_storage.delete_asset_folder_calls == [{"asset_id": "asset_1"}]
 
 
 @pytest.mark.asyncio
