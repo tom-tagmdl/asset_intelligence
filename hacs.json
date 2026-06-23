@@ -1,0 +1,9 @@
+{
+  "name": "Asset Intelligence",
+  "homeassistant": "2024.1.0",
+  "domains": [
+    "asset_intelligence"
+  ],
+  "content_in_root": true,
+  "render_readme": true
+}
