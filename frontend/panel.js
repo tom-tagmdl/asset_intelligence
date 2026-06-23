@@ -1172,11 +1172,6 @@ class AssetIntelligenceApp extends HTMLElement {
           display: none !important;
         }
 
-        /* Room page hard guard: image cards should render background image only. */
-        .ai-room-asset-card .ai-card-top.has-image > * {
-          display: none !important;
-        }
-
         .ai-card-top.has-image::after {
           content: "";
           position: absolute;
