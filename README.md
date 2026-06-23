@@ -154,6 +154,56 @@ This allows the home to evaluate:
 
 ---
 
+## Start/Stop Measurement (Per Asset)
+
+Asset Intelligence includes a focused measurement workflow on the Asset Detail page.
+
+- **Start measurement** begins a time-bound observation session for a specific asset in its current room context.
+- While active, the header shows a live measurement box with:
+	- elapsed timer
+	- coordinator update count (how many new environment refresh cycles were captured)
+	- quick **Stop measurement** action
+- **Stop measurement** requests session completion and finalizes the measurement profile from captured observations.
+
+### What It Is Used For In A Room
+
+Use Start/Stop Measurement when you want to understand how a room behaves over a real observation window for one asset, not just a single instant reading.
+
+Examples:
+- Verify how stable temperature/humidity are around an instrument during evening hours.
+- Capture changing light exposure for an artwork near windows.
+- Compare before/after behavior while HVAC, shades, or room setup are adjusted.
+
+### Activity Timeline Entries
+
+Measurement sessions are written into the Activity pane with dedicated entries:
+
+- **Start entry**: records session start timestamp and initial room-environment snapshot.
+- **Stop entry**: records completion timestamp, observation/update count, and finalized measurement profile results.
+
+This gives a clear audit trail of when the measurement began, how much data was collected, and what the final observed baseline looked like.
+
+### Room-Level Measurement History (Over Time)
+
+Room Detail now includes a dedicated **Room Measurement History** panel so users can evaluate room conditions over time and decide whether the room is appropriate for a given asset.
+
+What this provides:
+- A room-scoped timeline of measurement sessions across assets in that room
+- Newest sessions at the top, oldest at the bottom
+- Asset context on each entry (which asset the session was run for)
+- Filter options for **All**, **Start**, **Stop**, and **Asset**
+- A quick trend summary showing:
+	- session count
+	- last session timestamp
+	- average observations per completed session
+
+Why this matters:
+- You can compare room behavior across multiple sessions, times of day, and assets.
+- You can validate whether a room remains stable enough for sensitive assets (for example, artwork, instruments, or electronics).
+- You can make placement decisions using observed room behavior, not just one-point-in-time readings.
+
+---
+
 ## 🔬 What Makes This Different
 
 - Assets define what conditions matter  
@@ -268,56 +318,6 @@ Asset Intelligence transforms Home Assistant into:
 The result:
 
 > **A home that behaves with intention.**
-
----
-
-## Start/Stop Measurement (Per Asset)
-
-Asset Intelligence includes a focused measurement workflow on the Asset Detail page.
-
-- **Start measurement** begins a time-bound observation session for a specific asset in its current room context.
-- While active, the header shows a live measurement box with:
-	- elapsed timer
-	- coordinator update count (how many new environment refresh cycles were captured)
-	- quick **Stop measurement** action
-- **Stop measurement** requests session completion and finalizes the measurement profile from captured observations.
-
-### What It Is Used For In A Room
-
-Use Start/Stop Measurement when you want to understand how a room behaves over a real observation window for one asset, not just a single instant reading.
-
-Examples:
-- Verify how stable temperature/humidity are around an instrument during evening hours.
-- Capture changing light exposure for an artwork near windows.
-- Compare before/after behavior while HVAC, shades, or room setup are adjusted.
-
-### Activity Timeline Entries
-
-Measurement sessions are written into the Activity pane with dedicated entries:
-
-- **Start entry**: records session start timestamp and initial room-environment snapshot.
-- **Stop entry**: records completion timestamp, observation/update count, and finalized measurement profile results.
-
-This gives a clear audit trail of when the measurement began, how much data was collected, and what the final observed baseline looked like.
-
-### Room-Level Measurement History (Over Time)
-
-Room Detail now includes a dedicated **Room Measurement History** panel so users can evaluate room conditions over time and decide whether the room is appropriate for a given asset.
-
-What this provides:
-- A room-scoped timeline of measurement sessions across assets in that room
-- Newest sessions at the top, oldest at the bottom
-- Asset context on each entry (which asset the session was run for)
-- Filter options for **All**, **Start**, **Stop**, and **Asset**
-- A quick trend summary showing:
-	- session count
-	- last session timestamp
-	- average observations per completed session
-
-Why this matters:
-- You can compare room behavior across multiple sessions, times of day, and assets.
-- You can validate whether a room remains stable enough for sensitive assets (for example, artwork, instruments, or electronics).
-- You can make placement decisions using observed room behavior, not just one-point-in-time readings.
 
 ---
 
