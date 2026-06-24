@@ -75,6 +75,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._measurementTicker = null;
     this._assetDetailInteractionActive = false;
     this._assetDetailInteractionTimer = null;
+    this._roomConfigInteractionActive = false;
+    this._roomConfigInteractionTimer = null;
     // ✅ Cache for authenticated protected image blob URLs
     this._protectedImageBlobCache = {};
 
@@ -115,6 +117,99 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     if (super.connectedCallback) super.connectedCallback();
     document.addEventListener("show-dialog", this._boundShowDialogHandler);
     window.addEventListener("beforeunload", this._boundBeforeUnloadHandler);
+    this._bindRoomConfigDelegation();
+  }
+
+  _bindRoomConfigDelegation() {
+    // Single delegated handler on the component root — survives innerHTML replacement.
+    // Handles all room-config action buttons (edit, save, cancel, remove metric).
+    if (this._roomConfigDelegationBound) return;
+    this._roomConfigDelegationBound = true;
+
+    // Set interaction guard on pointerdown so a pending hass update
+    // can't replace the DOM between pointerdown and click.
+    this.addEventListener("pointerdown", (e) => {
+      if (this._view?.type !== "room-config") return;
+      const btn = e.target?.closest(
+        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric]"
+      );
+      if (!btn) return;
+      this._roomConfigInteractionActive = true;
+      if (this._roomConfigInteractionTimer) clearTimeout(this._roomConfigInteractionTimer);
+      this._roomConfigInteractionTimer = setTimeout(() => {
+        this._roomConfigInteractionActive = false;
+        this._roomConfigInteractionTimer = null;
+      }, 800);
+    }, true);
+
+    this.addEventListener("click", (e) => {
+      if (this._view?.type !== "room-config") return;
+
+      const editBtn = e.target?.closest("[data-edit-metric]");
+      if (editBtn) {
+        e.stopPropagation();
+        const fieldPath = editBtn.getAttribute("data-edit-metric");
+        if (!fieldPath) return;
+        this._roomConfigInteractionActive = false;
+        this._editingMetric = fieldPath;
+        this._render();
+        requestAnimationFrame(() => {
+          Promise.resolve().then(() => {
+            const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
+            if (!picker) return;
+            try { picker.hass = this._hass; } catch (_) {}
+            try {
+              const roomId = this._view?.roomId;
+              if (roomId) picker.entityFilter = this._createMetricEntityFilter(roomId, fieldPath);
+            } catch (_) {}
+            try { if (typeof picker.requestUpdate === "function") picker.requestUpdate(); } catch (_) {}
+          });
+        });
+        return;
+      }
+
+      const cancelBtn = e.target?.closest("[data-cancel-metric]");
+      if (cancelBtn) {
+        e.stopPropagation();
+        const fieldPath = cancelBtn.getAttribute("data-cancel-metric");
+        if (fieldPath && this._draftMetrics[fieldPath]) delete this._draftMetrics[fieldPath];
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const removeBtn = e.target?.closest("[data-remove-metric]");
+      if (removeBtn) {
+        e.stopPropagation();
+        const fieldPath = removeBtn.getAttribute("data-remove-metric");
+        if (fieldPath) this._draftMetrics[fieldPath] = { entity: "" };
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const saveBtn = e.target?.closest("[data-save-metric]");
+      if (saveBtn) {
+        e.stopPropagation();
+        const fieldPath = saveBtn.getAttribute("data-save-metric");
+        if (!fieldPath) return;
+        const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
+        const selected =
+          this._draftMetrics[fieldPath]?.entity ??
+          picker?.value ??
+          picker?.entityId ??
+          picker?.selected ??
+          "";
+        if (!this._draftMetrics[fieldPath]) this._draftMetrics[fieldPath] = {};
+        this._draftMetrics[fieldPath].entity = selected;
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+    }, true);
   }
 
   disconnectedCallback() {
@@ -994,6 +1089,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     }
 
       if (hasActiveAssetDraft) {
+      return;
+    }
+
+    if (this._roomConfigInteractionActive && this._view?.type === "room-config") {
       return;
     }
 
@@ -3103,6 +3202,43 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       roomAssets.length,
     );
 
+    const sourceStatus = attrs.source_status && typeof attrs.source_status === "object"
+      ? attrs.source_status
+      : {};
+    const configuredSignals = Number(sourceStatus.configured_signals || 0);
+    const signalsWithData = Number(sourceStatus.signals_with_data || 0);
+    const coveragePercent = configuredSignals > 0
+      ? Math.round((signalsWithData / configuredSignals) * 100)
+      : 0;
+    const sourceDetails = sourceStatus.details && typeof sourceStatus.details === "object"
+      ? sourceStatus.details
+      : {};
+    const configuredEntries = Object.entries(sourceDetails).filter(([, meta]) => {
+      return meta && typeof meta === "object" && !!meta.configured;
+    });
+    const missingSignalLabels = configuredEntries
+      .filter(([, meta]) => !meta.has_data)
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
+    const reportingSignalLabels = configuredEntries
+      .filter(([, meta]) => !!meta.has_data)
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
+    const roomConfidenceSummary = (() => {
+      const normalized = String(attrs.confidence || "").toUpperCase();
+      if (normalized === "GOOD") {
+        return "Most configured room signals are reporting valid data.";
+      }
+      if (normalized === "PARTIAL") {
+        return "Some configured room signals are missing data, reducing certainty.";
+      }
+      if (normalized === "DEGRADED") {
+        return "A significant portion of configured room signals are unavailable.";
+      }
+      if (normalized === "STALE") {
+        return "Room signal data is stale or unavailable; confidence is low.";
+      }
+      return "Confidence is based on configured sensor coverage and data availability.";
+    })();
+
     const humanHealth = attrs.human_health && typeof attrs.human_health === "object"
       ? attrs.human_health
       : {};
@@ -3275,6 +3411,63 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           </div>
 
           <div class="ai-column">
+            <div class="ai-panel-card" style="margin-bottom: 12px;">
+              <div class="ai-panel-body">
+                <div class="ai-panel-title-row">
+                  <div>
+                    <div class="ai-panel-title">Room Confidence Drivers</div>
+                    <div class="ai-panel-subtitle">Why the room confidence is currently ${this._escapeHtml(this._titleCase(String(attrs.confidence || "Unknown").toLowerCase()))}</div>
+                  </div>
+                </div>
+
+                <div class="ai-readout-card" style="margin-bottom:12px;">
+                  <div class="ai-readout-grid">
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Coverage</div>
+                      <div class="ai-readout-value">${this._escapeHtml(`${signalsWithData}/${configuredSignals} (${coveragePercent}%)`)}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Configured signals</div>
+                      <div class="ai-readout-value">${this._escapeHtml(String(configuredSignals))}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Signals reporting</div>
+                      <div class="ai-readout-value">${this._escapeHtml(String(signalsWithData))}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Signals missing</div>
+                      <div class="ai-readout-value">${this._escapeHtml(String(Math.max(configuredSignals - signalsWithData, 0)))}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ai-group-card" style="margin-bottom:12px;">
+                  <div class="ai-group-title">Confidence summary</div>
+                  <div class="ai-group-row"><span class="ai-muted">Reason</span><span>${this._escapeHtml(roomConfidenceSummary)}</span></div>
+                </div>
+
+                <div class="ai-group-card" style="margin-bottom:12px;">
+                  <div class="ai-group-title">Signals currently missing — <button class="ai-link-btn" style="font-size:12px;" data-room-config="${this._escapeHtml(roomId)}">Configure sensors</button></div>
+                  ${missingSignalLabels.length
+                    ? missingSignalLabels.slice(0, 5).map((label) => `
+                        <div class="ai-group-row"><span class="ai-muted">Missing</span><span>${this._escapeHtml(label)}</span></div>
+                      `).join("")
+                    : `<div class="ai-group-row"><span class="ai-muted">Missing</span><span>None — all configured signals are reporting</span></div>`
+                  }
+                </div>
+
+                <div class="ai-group-card" style="margin-bottom:12px;">
+                  <div class="ai-group-title">Signals supporting confidence</div>
+                  ${reportingSignalLabels.length
+                    ? reportingSignalLabels.slice(0, 5).map((label) => `
+                        <div class="ai-group-row"><span class="ai-muted">Reporting</span><span>${this._escapeHtml(label)}</span></div>
+                      `).join("")
+                    : `<div class="ai-group-row"><span class="ai-muted">Reporting</span><span>No configured signals are reporting</span></div>`
+                  }
+                </div>
+              </div>
+            </div>
+
             <div class="ai-panel-card" style="margin-bottom: 12px;">
               <div class="ai-panel-body">
                 <div class="ai-panel-title-row">
@@ -7267,73 +7460,9 @@ _getAssetTimelineItems(attrs) {
       };
     });
 
-    // Edit metric
-    this.querySelectorAll("[data-edit-metric]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const fieldPath = el.getAttribute("data-edit-metric");
-        if (!fieldPath) return;
-
-        this._editingMetric = fieldPath;
-        this._render();
-      };
-    });
-
-    // Cancel edit
-    this.querySelectorAll("[data-cancel-metric]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const fieldPath = el.getAttribute("data-cancel-metric");
-        if (fieldPath && this._draftMetrics[fieldPath]) {
-          delete this._draftMetrics[fieldPath];
-        }
-
-        this._editingMetric = null;
-        this._render();
-      };
-    });
-
-    // Remove metric (stage empty value only; final persistence happens with bottom Save)
-    this.querySelectorAll("[data-remove-metric]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const fieldPath = el.getAttribute("data-remove-metric");
-        if (!fieldPath) return;
-
-        this._draftMetrics[fieldPath] = { entity: "" };
-        this._editingMetric = null;
-        this._render();
-      };
-    });
-
-    // Save metric
-    this.querySelectorAll("[data-save-metric]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const fieldPath = el.getAttribute("data-save-metric");
-        if (!fieldPath) return;
-
-        const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
-        const selected =
-          this._draftMetrics[fieldPath]?.entity ??
-          picker?.value ??
-          picker?.entityId ??
-          picker?.selected ??
-          "";
-
-        if (!this._draftMetrics[fieldPath]) {
-          this._draftMetrics[fieldPath] = {};
-        }
-
-        this._draftMetrics[fieldPath].entity = selected;
-        this._editingMetric = null;
-        this._render();
-      };
-    });
+    // Edit / save / cancel / remove metric are now handled by the delegated
+    // listener in _bindRoomConfigDelegation() (bound once in connectedCallback)
+    // so they survive innerHTML replacement between pointerdown and click.
 
     // ==========================================================
     // ASSET DETAIL: overflow, dirty tracking, and save
