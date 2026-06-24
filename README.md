@@ -19,15 +19,6 @@ into
 > **understanding what matters**
 
 ---
-## Installation
-
-1. Open HACS
-2. Add custom repository:
-   https://github.com/tom-tagmdl/asset_intelligence
-3. Restart Home Assistant
-4. Add the integration
-
----
 
 ## 🚀 Start Here
 
@@ -36,6 +27,39 @@ To understand how the system works:
 - 👉 [Concepts](https://github.com/tom-tagmdl/asset_intelligence/wiki/Concepts)
 - 👉 [Getting Started](https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started)
 - 👉 [System Flow Overview](https://github.com/tom-tagmdl/asset_intelligence/wiki/System-Flow-Overview)
+
+---
+
+## Installation
+
+### HACS (Recommended)
+
+1. Open HACS in Home Assistant.
+2. Go to Integrations.
+3. Click the menu and select Custom repositories.
+4. Add `https://github.com/tom-tagmdl/asset_intelligence` with category `Integration`.
+5. Search for `Asset Intelligence` and install.
+6. Restart Home Assistant.
+7. Go to Settings > Devices & Services > Add Integration and add `Asset Intelligence`.
+
+### Initial Setup Example
+
+In the integration options, configure:
+
+- Default labels: for example `Asset`
+- Document storage path: for example `/media/asset_intelligence_documents`
+- Enable document management: `on`
+
+Notes:
+
+- Default labels are applied automatically to new assets.
+- If frontend updates are not immediately visible after an upgrade, perform a hard browser refresh.
+
+### My Home Assistant Link
+
+Track this repository directly in HACS:
+
+[![Open your Home Assistant instance and show this repository inside HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=tom-tagmdl&repository=asset_intelligence&category=integration)
 
 ---
 
