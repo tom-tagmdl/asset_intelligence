@@ -3575,10 +3575,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             )
 
         system_defaults = dict(getattr(store, "system_defaults", {}) or {})
-        system_defaults["default_label_ids"] = list(
-            options.get("default_label_ids") or []
-        )
-        store.system_defaults = system_defaults
+        if "default_label_ids" in options:
+            system_defaults["default_label_ids"] = list(
+                options.get("default_label_ids") or []
+            )
+            store.system_defaults = system_defaults
 
         root_path = _normalize_storage_path(config.get("root_path"))
         config["root_path"] = root_path

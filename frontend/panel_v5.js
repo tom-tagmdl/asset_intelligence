@@ -8172,14 +8172,22 @@ _getAssetTimelineItems(attrs) {
         ? selectedLabels
         : (selectedLabels.length ? selectedLabels : fallbackDefaultLabels);
 
+      const addAssetPayload = {
+        asset_id: assetId,
+        name: rawName,
+        asset_type: draft.asset_type,
+        area_id: draft.area_id,
+      };
+
+      // Preserve backend default-label fallback when the user did not touch labels
+      // and the UI has not yet resolved defaults. If labels were touched, always send
+      // explicit intent (including an empty list when user cleared all labels).
+      if (draft?.labels_touched || effectiveLabels.length) {
+        addAssetPayload.labels = effectiveLabels;
+      }
+
       try {
-        await this._callService("asset_intelligence", "add_asset", {
-          asset_id: assetId,
-          name: rawName,
-          asset_type: draft.asset_type,
-          area_id: draft.area_id,
-          labels: effectiveLabels
-        });
+        await this._callService("asset_intelligence", "add_asset", addAssetPayload);
 
         assetCreated = true;
 
