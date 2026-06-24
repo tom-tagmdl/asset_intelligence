@@ -19,6 +19,15 @@ into
 > **understanding what matters**
 
 ---
+## Installation
+
+1. Open HACS
+2. Add custom repository:
+   https://github.com/tom-tagmdl/asset_intelligence
+3. Restart Home Assistant
+4. Add the integration
+
+---
 
 ## 🚀 Start Here
 
