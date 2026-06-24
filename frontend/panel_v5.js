@@ -3558,9 +3558,51 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     if (this._assetDetailInteractionBoundShell === shell) return;
 
+    const PICKER_TAGS = new Set([
+      "ha-labels-picker", "ha-label-picker", "ha-area-picker",
+      "ha-entity-picker", "ha-selector", "ha-icon-picker",
+    ]);
+
     const isEditableControl = (target) => {
       if (!(target instanceof HTMLElement)) return false;
-      return !!target.closest("input, select, textarea, ha-entity-picker, ha-area-picker, ha-labels-picker, ha-selector, .ai-form-control");
+      return !!target.closest(
+        "input, select, textarea, ha-entity-picker, ha-area-picker, ha-labels-picker, ha-selector, .ai-form-control"
+      );
+    };
+
+    // Walk up through shadow roots to find if an element is inside the shell
+    const isInsideShell = (el) => {
+      let node = el;
+      while (node) {
+        if (node === shell) return true;
+        // Cross shadow boundary upward
+        const root = node.getRootNode && node.getRootNode();
+        if (root instanceof ShadowRoot) {
+          node = root.host;
+        } else {
+          node = node.parentElement;
+        }
+      }
+      return false;
+    };
+
+    // Check if any picker inside the shell currently has an open overlay
+    const anyPickerOpen = () => {
+      const pickers = shell.querySelectorAll(
+        "ha-labels-picker, ha-label-picker, ha-area-picker, ha-entity-picker, ha-selector"
+      );
+      for (const picker of pickers) {
+        if (picker.hasAttribute("open") || picker.hasAttribute("opened")) return true;
+        // Check shadow DOM for open mwc-menu or paper-dialog
+        try {
+          const inner = picker.shadowRoot;
+          if (inner) {
+            const menu = inner.querySelector("mwc-menu, paper-listbox, ha-combo-box, vaadin-combo-box");
+            if (menu && (menu.hasAttribute("open") || menu.opened === true)) return true;
+          }
+        } catch (_) {}
+      }
+      return false;
     };
 
     const keepActive = () => {
@@ -3571,24 +3613,74 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       }
     };
 
-    const releaseSoon = () => {
+    const releaseSoon = (delay = 1500) => {
       if (this._assetDetailInteractionTimer) {
         clearTimeout(this._assetDetailInteractionTimer);
       }
       this._assetDetailInteractionTimer = setTimeout(() => {
-        const active = document.activeElement;
-        const stillInside = active instanceof HTMLElement && !!active.closest(".ai-asset-shell");
-        if (!stillInside) {
-          this._assetDetailInteractionActive = false;
-        }
         this._assetDetailInteractionTimer = null;
-      }, 350);
+
+        // If any picker is still open, extend the guard
+        if (anyPickerOpen()) {
+          releaseSoon(800);
+          return;
+        }
+
+        const active = document.activeElement;
+        // Check standard DOM containment first
+        if (active instanceof HTMLElement && !!active.closest(".ai-asset-shell")) return;
+        // Check shadow-root-aware containment (handles portalled overlays focused inside pickers)
+        if (active instanceof HTMLElement && isInsideShell(active)) return;
+        // Check if focus is inside a picker tag at document level (portalled overlay)
+        if (active instanceof HTMLElement) {
+          const pickerAncestor = active.closest(
+            "ha-labels-picker, ha-label-picker, ha-area-picker, ha-entity-picker, ha-selector"
+          );
+          if (pickerAncestor && isInsideShell(pickerAncestor)) return;
+        }
+
+        this._assetDetailInteractionActive = false;
+      }, delay);
     };
 
+    // Keep active on any pointerdown inside the shell
     shell.addEventListener("pointerdown", (event) => {
       if (!isEditableControl(event.target)) return;
       keepActive();
     }, true);
+
+    // Also catch pointerdown on portalled picker overlays at document level
+    if (!this._assetDetailDocPointerBound) {
+      document.addEventListener("pointerdown", (event) => {
+        if (this._view?.type !== "asset-detail") return;
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+
+        // Check if the clicked element is inside a picker that belongs to our shell
+        const closestPicker = target.closest(
+          "ha-labels-picker, ha-label-picker, ha-area-picker, ha-entity-picker, ha-selector, mwc-menu, paper-listbox, vaadin-combo-box-overlay"
+        );
+        if (!closestPicker) return;
+
+        // Find if this picker (or an ancestor) is inside our shell
+        const shellPickers = shell.querySelectorAll(
+          "ha-labels-picker, ha-area-picker, ha-entity-picker, ha-selector"
+        );
+        for (const sp of shellPickers) {
+          if (sp === closestPicker || sp.contains(closestPicker) || closestPicker.contains(sp)) {
+            keepActive();
+            return;
+          }
+        }
+
+        // Also handle when the overlay is portalled: check if the tag is a known picker type
+        const tag = String(closestPicker.tagName || "").toLowerCase();
+        if (PICKER_TAGS.has(tag)) {
+          keepActive();
+        }
+      }, true);
+      this._assetDetailDocPointerBound = true;
+    }
 
     shell.addEventListener("focusin", (event) => {
       if (!isEditableControl(event.target)) return;
@@ -3597,19 +3689,18 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     shell.addEventListener("focusout", (event) => {
       if (!isEditableControl(event.target)) return;
-      releaseSoon();
+      releaseSoon(1500);
     }, true);
 
     shell.addEventListener("input", (event) => {
       if (!isEditableControl(event.target)) return;
       keepActive();
-      releaseSoon();
     }, true);
 
     shell.addEventListener("change", (event) => {
       if (!isEditableControl(event.target)) return;
       keepActive();
-      releaseSoon();
+      releaseSoon(800);
     }, true);
 
     this._assetDetailInteractionBoundShell = shell;
