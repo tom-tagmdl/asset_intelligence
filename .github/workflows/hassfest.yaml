@@ -1,4 +1,5 @@
 name: Validate with hassfest
+run-name: Hassfest Validate - ${{ github.ref_name }} - ${{ github.sha }}
 on:
   push:
     branches:
