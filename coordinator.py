@@ -26,7 +26,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from .advisory import generate_asset_advisory
 from .const import DOMAIN
 from .environment import get_room_environment
-from .evaluation import evaluate_asset_environment
+from .evaluation import evaluate_asset_environment, evaluate_room_human_health
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from .services.document_retrieval import DocumentRetrievalService
@@ -147,11 +147,11 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
             cycle_timestamp = self._utcnow_iso()
             assets = self.store.assets
             room_assets = self._group_assets_by_room(assets)
-            room_environment_cache = await self._async_build_room_environment_cache(
+            room_environment_cache, room_health_changed = await self._async_build_room_environment_cache(
                 room_assets,
                 cycle_timestamp,
             )
-            changed = False
+            changed = room_health_changed
             projection_payload: dict[str, dict[str, Any]] = {}
             projection_index: dict[str, AssetProjection] = {}
             for asset_id, asset in assets.items():
@@ -563,6 +563,8 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         room.setdefault("environment_config", {})
         room.setdefault("windows", [])
         room.setdefault("room_events", [])
+        room.setdefault("human_health", {})
+        room.setdefault("human_health_profile", {})
     def _group_assets_by_room(
         self,
         assets: dict[str, dict[str, Any]],
@@ -577,9 +579,10 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         self,
         room_assets: dict[str | None, list[dict[str, Any]]],
         cycle_timestamp: str,
-    ) -> dict[str | None, dict[str, Any]]:
+    ) -> tuple[dict[str | None, dict[str, Any]], bool]:
         """Build one room environment snapshot per room."""
         cache: dict[str | None, dict[str, Any]] = {}
+        room_health_changed = False
         all_room_ids = set(room_assets.keys()) | set(self.store.rooms.keys())
         for room_area_id in all_room_ids:
             if room_area_id is None:
@@ -606,8 +609,49 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
                 env=env,
                 cycle_timestamp=cycle_timestamp,
             )
+
+            existing_health = room_record.get("human_health")
+            if not isinstance(existing_health, dict):
+                existing_health = {}
+
+            room_profile = self._resolve_room_human_health_profile(room_record)
+            human_health = evaluate_room_human_health(
+                room_environment=normalized,
+                profile=room_profile,
+                previous_state=existing_health.get("state"),
+                previous_status_since=existing_health.get("status_since"),
+            )
+            normalized["human_health"] = human_health
+
+            if room_record.get("human_health") != human_health:
+                room_record["human_health"] = human_health
+                self.store.rooms[room_area_id] = room_record
+                room_health_changed = True
+
             cache[room_area_id] = normalized
-        return cache
+        return cache, room_health_changed
+
+    def _resolve_room_human_health_profile(self, room_record: dict[str, Any]) -> dict[str, Any]:
+        """Resolve room-specific human health profile with system-default fallback."""
+        system_defaults = self.store.system_defaults if isinstance(self.store.system_defaults, dict) else {}
+        system_profile = system_defaults.get("human_health_profile")
+        if not isinstance(system_profile, dict):
+            system_profile = {}
+
+        room_profile = room_record.get("human_health_profile")
+        if not isinstance(room_profile, dict):
+            room_profile = {}
+
+        merged = dict(system_profile)
+        for key, value in room_profile.items():
+            if isinstance(value, dict) and isinstance(merged.get(key), dict):
+                nested = dict(merged.get(key) or {})
+                nested.update(value)
+                merged[key] = nested
+            else:
+                merged[key] = value
+
+        return merged
     def _normalize_room_environment(
         self,
         *,
@@ -693,6 +737,7 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
             "confidence": env.get("confidence"),
             "last_updated": cycle_timestamp,
             "source_status": source_status,
+            "human_health": env.get("human_health") if isinstance(env.get("human_health"), dict) else {},
         }
     # ---------------------------------------------------------
     # Phase 4E — Measurement Tracking Logic
@@ -1664,6 +1709,22 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
                 "signals_with_data": 0,
                 "signals_missing": 0,
                 "details": {},
+            },
+            "human_health": {
+                "profile_name": "baseline_adult",
+                "state": "UNKNOWN",
+                "confidence": "LOW",
+                "status_since": cycle_timestamp,
+                "evaluated_at": cycle_timestamp,
+                "reasons": [],
+                "advisory_state": "UNKNOWN",
+                "advisory_confidence": "LOW",
+                "advisory_reasons": [],
+                "missing_signals": [],
+                "observed_signals": 0,
+                "total_signals": 0,
+                "readings": {},
+                "ranges": {},
             },
         }
     def _log_projection(

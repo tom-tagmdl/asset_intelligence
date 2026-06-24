@@ -245,8 +245,38 @@ class AssetStore:
                     "recovery_seconds": 600,
                 },
                 "default_label_ids": [],
+                "human_health_profile": {
+                    "profile_name": "baseline_adult",
+                    "temperature": {"min": 68.0, "max": 77.0, "hard_min": 60.0, "hard_max": 85.0},
+                    "humidity": {"min": 30.0, "max": 60.0, "hard_min": 20.0, "hard_max": 70.0},
+                    "co2": {"max": 1000.0, "hard_max": 1500.0},
+                    "pm2_5": {"max": 12.0, "hard_max": 35.0},
+                    "voc": {"max": 500.0, "hard_max": 1000.0},
+                },
             }
             changed = True
+        else:
+            if "debounce" not in self.system_defaults or not isinstance(self.system_defaults.get("debounce"), dict):
+                self.system_defaults["debounce"] = {
+                    "red_transition_seconds": 300,
+                    "recovery_seconds": 600,
+                }
+                changed = True
+
+            if "default_label_ids" not in self.system_defaults or not isinstance(self.system_defaults.get("default_label_ids"), list):
+                self.system_defaults["default_label_ids"] = []
+                changed = True
+
+            if "human_health_profile" not in self.system_defaults or not isinstance(self.system_defaults.get("human_health_profile"), dict):
+                self.system_defaults["human_health_profile"] = {
+                    "profile_name": "baseline_adult",
+                    "temperature": {"min": 68.0, "max": 77.0, "hard_min": 60.0, "hard_max": 85.0},
+                    "humidity": {"min": 30.0, "max": 60.0, "hard_min": 20.0, "hard_max": 70.0},
+                    "co2": {"max": 1000.0, "hard_max": 1500.0},
+                    "pm2_5": {"max": 12.0, "hard_max": 35.0},
+                    "voc": {"max": 500.0, "hard_max": 1000.0},
+                }
+                changed = True
 
         if not self.label_profiles:
             self.label_profiles = {
@@ -549,6 +579,8 @@ class AssetStore:
         changed |= self._ensure_dict_field(room, "environment_config")
         changed |= self._ensure_list_field(room, "windows")
         changed |= self._ensure_list_field(room, "room_events")
+        changed |= self._ensure_dict_field(room, "human_health")
+        changed |= self._ensure_dict_field(room, "human_health_profile")
         return changed
 
     # -----------------------------------------------------------

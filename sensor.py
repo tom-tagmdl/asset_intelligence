@@ -400,6 +400,22 @@ def _default_room_environment(area_id: str | None = None) -> Dict[str, Any]:
             "signals_missing": 0,
             "details": {},
         },
+        "human_health": {
+            "profile_name": "baseline_adult",
+            "state": "UNKNOWN",
+            "confidence": "LOW",
+            "status_since": None,
+            "evaluated_at": None,
+            "reasons": [],
+            "advisory_state": "UNKNOWN",
+            "advisory_confidence": "LOW",
+            "advisory_reasons": [],
+            "missing_signals": [],
+            "observed_signals": 0,
+            "total_signals": 0,
+            "readings": {},
+            "ranges": {},
+        },
     }
 
 def _default_unassigned_projection(asset_id: str, area_id: str | None = None) -> Dict[str, Any]:
@@ -717,6 +733,7 @@ class RoomEnvironmentEntity(CoordinatorEntity, SensorEntity):
             "last_updated": env.get("last_updated"),
             "source_status": env.get("source_status", {}),
             "image": env.get("image"),
+            "human_health": env.get("human_health", {}),
         }
 
 # -----------------------------------------------------------

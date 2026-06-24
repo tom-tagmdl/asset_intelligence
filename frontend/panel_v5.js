@@ -3103,6 +3103,23 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       roomAssets.length,
     );
 
+    const humanHealth = attrs.human_health && typeof attrs.human_health === "object"
+      ? attrs.human_health
+      : {};
+    const humanHealthState = String(humanHealth.state || "UNKNOWN").toUpperCase();
+    const humanHealthConfidence = String(humanHealth.confidence || "LOW").toUpperCase();
+    const humanHealthAdvisoryState = String(humanHealth.advisory_state || humanHealthState || "UNKNOWN").toUpperCase();
+    const humanHealthAdvisoryConfidence = String(humanHealth.advisory_confidence || humanHealthConfidence || "LOW").toUpperCase();
+    const humanHealthStatusSince = this._formatLocalDateTime(humanHealth.status_since || attrs.last_updated);
+    const humanHealthReasons = Array.isArray(humanHealth.reasons)
+      ? humanHealth.reasons
+      : (typeof humanHealth.reasons === "string" && humanHealth.reasons.trim() ? [humanHealth.reasons.trim()] : []);
+    const humanHealthAdvisoryReasons = Array.isArray(humanHealth.advisory_reasons)
+      ? humanHealth.advisory_reasons
+      : (typeof humanHealth.advisory_reasons === "string" && humanHealth.advisory_reasons.trim() ? [humanHealth.advisory_reasons.trim()] : []);
+    const humanHealthObserved = Number(humanHealth.observed_signals || 0);
+    const humanHealthTotal = Number(humanHealth.total_signals || 0);
+
     this._currentHistory = roomMeasurementHistory;
 
     const climate = attrs.climate || {};
@@ -3258,6 +3275,84 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           </div>
 
           <div class="ai-column">
+            <div class="ai-panel-card" style="margin-bottom: 12px;">
+              <div class="ai-panel-body">
+                <div class="ai-panel-title-row">
+                  <div>
+                    <div class="ai-panel-title">People Health</div>
+                    <div class="ai-panel-subtitle">Baseline room health and comfort assessment for occupants</div>
+                  </div>
+                </div>
+
+                <div class="ai-readout-card" style="margin-bottom:12px;">
+                  <div class="ai-readout-grid">
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Status since</div>
+                      <div class="ai-readout-value">${this._escapeHtml(humanHealthStatusSince)}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Health state</div>
+                      <div class="ai-readout-value">${this._escapeHtml(this._titleCase(humanHealthState.toLowerCase()))}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Confidence</div>
+                      <div class="ai-readout-value">${this._escapeHtml(this._titleCase(humanHealthConfidence.toLowerCase()))}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Signals observed</div>
+                      <div class="ai-readout-value">${this._escapeHtml(`${humanHealthObserved}/${humanHealthTotal || 0}`)}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ai-readout-card" style="margin-bottom:12px;">
+                  <div class="ai-readout-grid">
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Advisory state</div>
+                      <div class="ai-readout-value">${this._escapeHtml(this._titleCase(humanHealthAdvisoryState.toLowerCase()))}</div>
+                    </div>
+                    <div class="ai-readout-row">
+                      <div class="ai-readout-label">Advisory confidence</div>
+                      <div class="ai-readout-value">${this._escapeHtml(this._titleCase(humanHealthAdvisoryConfidence.toLowerCase()))}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="ai-group-card" style="margin-bottom:12px;">
+                  <div class="ai-group-title">Why this state</div>
+                  ${humanHealthReasons.length
+                    ? humanHealthReasons.slice(0, 4).map((reason) => `
+                        <div class="ai-group-row"><span class="ai-muted">Reason</span><span>${this._escapeHtml(reason)}</span></div>
+                      `).join("")
+                    : `<div class="ai-group-row"><span class="ai-muted">Reason</span><span>Room conditions are within baseline comfort ranges</span></div>`
+                  }
+                </div>
+
+                <div class="ai-group-card" style="margin-bottom:12px;">
+                  <div class="ai-group-title">Advisory guidance</div>
+                  ${humanHealthAdvisoryReasons.length
+                    ? humanHealthAdvisoryReasons.slice(0, 4).map((reason) => `
+                        <div class="ai-group-row"><span class="ai-muted">Action</span><span>${this._escapeHtml(reason)}</span></div>
+                      `).join("")
+                    : `<div class="ai-group-row"><span class="ai-muted">Action</span><span>No immediate occupant actions needed</span></div>`
+                  }
+                </div>
+
+                <div class="ai-updated" style="margin-top:6px;">
+                  State colors: Green = healthy, Amber = caution, Red = unhealthy. Confidence colors: High = strong coverage, Medium = partial coverage, Low = limited coverage.
+                </div>
+              </div>
+
+              <div class="ai-status-bar">
+                <div class="ai-status-half" style="background:${this._stateColor(humanHealthState)}">
+                  Health State
+                </div>
+                <div class="ai-status-half" style="background:${this._confidenceColor(humanHealthConfidence)}">
+                  Confidence
+                </div>
+              </div>
+            </div>
+
             <div class="ai-panel-card">
               <div class="ai-panel-body">
                 <div class="ai-panel-title-row">
@@ -11215,7 +11310,7 @@ _getAssetTimelineItems(attrs) {
   _stateColor(value) {
     const normalized = String(value || "").toUpperCase();
     if (normalized === "GOOD" || normalized === "GREEN") return "#2e7d32";
-    if (normalized === "PARTIAL" || normalized === "YELLOW") return "#f9a825";
+    if (normalized === "PARTIAL" || normalized === "YELLOW" || normalized === "AMBER") return "#f9a825";
     if (normalized === "RED") return "#c62828";
     if (normalized === "UNCONFIGURED") return "#9e9e9e";
     if (normalized === "STALE") return "#9e9e9e";
@@ -11224,6 +11319,8 @@ _getAssetTimelineItems(attrs) {
 
   _confidenceColor(value) {
     const normalized = String(value || "").toUpperCase();
+    if (normalized === "HIGH") return "#2e7d32";
+    if (normalized === "MEDIUM") return "#f9a825";
     if (normalized === "GOOD") return "#2e7d32";
     if (normalized === "PARTIAL") return "#f9a825";
     if (normalized === "LOW") return "#ef6c00";

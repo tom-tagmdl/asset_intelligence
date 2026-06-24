@@ -27,6 +27,18 @@ DEFAULT_SPATIAL_WINDOW_LIGHT_WARNING_LUX = 300.0
 DEFAULT_SPATIAL_EXPOSURE_LOW_LUX = 200.0
 DEFAULT_SPATIAL_EXPOSURE_HIGH_LUX = 500.0
 
+# -----------------------------------------------------------
+# MVP HUMAN HEALTH PROFILE (ROOM-LEVEL)
+# -----------------------------------------------------------
+DEFAULT_HUMAN_HEALTH_PROFILE = {
+    "profile_name": "baseline_adult",
+    "temperature": {"min": 68.0, "max": 77.0, "hard_min": 60.0, "hard_max": 85.0},
+    "humidity": {"min": 30.0, "max": 60.0, "hard_min": 20.0, "hard_max": 70.0},
+    "co2": {"max": 1000.0, "hard_max": 1500.0},
+    "pm2_5": {"max": 12.0, "hard_max": 35.0},
+    "voc": {"max": 500.0, "hard_max": 1000.0},
+}
+
 
 # -----------------------------------------------------------
 # TIME HELPERS
@@ -108,6 +120,172 @@ def _safe_bool(value: Any, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     return default
+
+
+def _merge_human_health_profile(profile: Dict[str, Any] | None) -> Dict[str, Any]:
+    """Merge caller-supplied profile with baseline defaults."""
+    merged = {
+        "profile_name": DEFAULT_HUMAN_HEALTH_PROFILE["profile_name"],
+        "temperature": dict(DEFAULT_HUMAN_HEALTH_PROFILE["temperature"]),
+        "humidity": dict(DEFAULT_HUMAN_HEALTH_PROFILE["humidity"]),
+        "co2": dict(DEFAULT_HUMAN_HEALTH_PROFILE["co2"]),
+        "pm2_5": dict(DEFAULT_HUMAN_HEALTH_PROFILE["pm2_5"]),
+        "voc": dict(DEFAULT_HUMAN_HEALTH_PROFILE["voc"]),
+    }
+
+    if not isinstance(profile, dict):
+        return merged
+
+    profile_name = profile.get("profile_name")
+    if profile_name not in (None, ""):
+        merged["profile_name"] = str(profile_name)
+
+    for metric in ("temperature", "humidity", "co2", "pm2_5", "voc"):
+        overrides = profile.get(metric)
+        if not isinstance(overrides, dict):
+            continue
+        metric_merged = dict(merged.get(metric, {}))
+        for key in ("min", "max", "hard_min", "hard_max"):
+            value = _as_float_or_none(overrides.get(key))
+            if value is not None:
+                metric_merged[key] = value
+        merged[metric] = metric_merged
+
+    return merged
+
+
+def evaluate_room_human_health(
+    room_environment: Dict[str, Any],
+    profile: Dict[str, Any] | None = None,
+    previous_state: str | None = None,
+    previous_status_since: str | None = None,
+) -> Dict[str, Any]:
+    """Evaluate room conditions for human health/comfort using MVP thresholds."""
+    merged_profile = _merge_human_health_profile(profile)
+    evaluated_at = _now_iso_local()
+
+    metric_inputs = [
+        (
+            "temperature",
+            _as_float_or_none(_safe_dict(room_environment.get("climate")).get("temperature")),
+            "Climate temperature",
+            "climate.temperature",
+            "temperature",
+        ),
+        (
+            "humidity",
+            _as_float_or_none(_safe_dict(room_environment.get("climate")).get("humidity")),
+            "Relative humidity",
+            "climate.humidity",
+            "humidity",
+        ),
+        (
+            "co2",
+            _as_float_or_none(_safe_dict(room_environment.get("control_context")).get("co2")),
+            "CO2",
+            "control_context.co2",
+            "co2",
+        ),
+        (
+            "pm2_5",
+            _as_float_or_none(_safe_dict(room_environment.get("particulates")).get("pm2_5")),
+            "PM2.5",
+            "particulates.pm2_5",
+            "pm2_5",
+        ),
+        (
+            "voc",
+            _as_float_or_none(_safe_dict(room_environment.get("air_quality")).get("voc")),
+            "VOC",
+            "air_quality.voc",
+            "voc",
+        ),
+    ]
+
+    amber_reasons: list[str] = []
+    red_reasons: list[str] = []
+    missing_signals: list[str] = []
+    readings: Dict[str, Any] = {}
+    ranges: Dict[str, Any] = {}
+
+    observed_count = 0
+
+    for metric_key, value, label, path_key, reading_key in metric_inputs:
+        thresholds = _safe_dict(merged_profile.get(metric_key))
+        ranges[metric_key] = dict(thresholds)
+        readings[reading_key] = value
+
+        if value is None:
+            missing_signals.append(path_key)
+            amber_reasons.append(f"Missing sensor data for {label}")
+            continue
+
+        observed_count += 1
+        min_v = _as_float_or_none(thresholds.get("min"))
+        max_v = _as_float_or_none(thresholds.get("max"))
+        hard_min_v = _as_float_or_none(thresholds.get("hard_min"))
+        hard_max_v = _as_float_or_none(thresholds.get("hard_max"))
+
+        if hard_min_v is not None and value < hard_min_v:
+            red_reasons.append(f"{label} is critically low ({value:g})")
+            continue
+
+        if hard_max_v is not None and value > hard_max_v:
+            red_reasons.append(f"{label} is critically high ({value:g})")
+            continue
+
+        if min_v is not None and value < min_v:
+            amber_reasons.append(f"{label} is below preferred range ({value:g})")
+
+        if max_v is not None and value > max_v:
+            amber_reasons.append(f"{label} is above preferred range ({value:g})")
+
+    total_metrics = len(metric_inputs)
+    coverage_ratio = observed_count / total_metrics if total_metrics else 0.0
+
+    if red_reasons:
+        state = RISK_RED
+    elif amber_reasons:
+        state = RISK_AMBER
+    else:
+        state = RISK_GREEN
+
+    if coverage_ratio >= 0.8 and not missing_signals:
+        confidence = "HIGH"
+    elif coverage_ratio >= 0.6:
+        confidence = "MEDIUM"
+    else:
+        confidence = "LOW"
+
+    if state == RISK_GREEN:
+        advisory_reasons = [
+            "Room conditions are within baseline comfort and air-quality ranges"
+        ]
+    else:
+        advisory_reasons = red_reasons + amber_reasons
+
+    normalized_previous = str(previous_state or "").upper()
+    if normalized_previous == state and previous_status_since:
+        status_since = previous_status_since
+    else:
+        status_since = evaluated_at
+
+    return {
+        "profile_name": str(merged_profile.get("profile_name") or "baseline_adult"),
+        "state": state,
+        "confidence": confidence,
+        "status_since": status_since,
+        "evaluated_at": evaluated_at,
+        "reasons": red_reasons + amber_reasons,
+        "advisory_state": state,
+        "advisory_confidence": confidence,
+        "advisory_reasons": advisory_reasons,
+        "missing_signals": missing_signals,
+        "observed_signals": observed_count,
+        "total_signals": total_metrics,
+        "readings": readings,
+        "ranges": ranges,
+    }
 
 
 # -----------------------------------------------------------
