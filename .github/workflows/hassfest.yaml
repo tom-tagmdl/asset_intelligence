@@ -14,7 +14,7 @@ jobs:
       - name: Prepare integration layout for hassfest
         run: |
           mkdir -p custom_components/asset_intelligence
-          rsync -a --delete \
+          rsync -a --delete --remove-source-files --prune-empty-dirs \
             --exclude '.git/' \
             --exclude '.github/' \
             --exclude 'custom_components/' \

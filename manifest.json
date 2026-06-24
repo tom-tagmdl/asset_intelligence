@@ -1,14 +1,14 @@
 {
   "domain": "asset_intelligence",
   "name": "Asset Intelligence",
-  "version": "0.0.10",
-  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started",
-  "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
-  "iot_class": "local_polling",
-  "config_flow": true,
-  "integration_type": "hub",
-  "requirements": [],
-  "dependencies": ["http"],
   "codeowners": ["@tom-tagmdl"],
-  "loggers": ["custom_components.asset_intelligence"]
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
+  "loggers": ["custom_components.asset_intelligence"],
+  "requirements": [],
+  "version": "0.0.10"
 }
