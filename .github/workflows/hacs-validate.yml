@@ -1,5 +1,5 @@
 name: Validate
-run-name: HACS Validate - ${{ github.ref_name }} - ${{ github.sha }}
+run-name: HACS Validate - ${{ github.event_name == 'push' && github.event.head_commit.message || github.ref_name }}
 
 on:
   push:
