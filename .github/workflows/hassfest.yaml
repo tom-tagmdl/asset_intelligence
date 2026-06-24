@@ -11,4 +11,12 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v3"
+      - name: Prepare integration layout for hassfest
+        run: |
+          mkdir -p custom_components/asset_intelligence
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'custom_components/' \
+            ./ custom_components/asset_intelligence/
       - uses: home-assistant/actions/hassfest@master
