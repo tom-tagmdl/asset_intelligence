@@ -185,6 +185,43 @@ This allows the home to evaluate:
 - Is CO₂ elevated?
 - Is the room becoming unsafe?
 
+### Room Risk & Advisory (Room Detail)
+
+Room Detail now includes a room-scoped risk/advisory interpretation layer designed for explainability.
+
+What this adds:
+- **State** and **Confidence** context for the room snapshot
+- **Status since** time tracking for the current condition state
+- Clear reasons for the current room condition
+- Advisory-oriented guidance tied to observed room signals
+
+Why this matters:
+- Users can understand room-level safety context before reading raw sensor values.
+- It provides a faster decision path for placement and remediation actions.
+
+### People Health (MVP)
+
+Room Detail now includes a dedicated **People Health** panel that evaluates room conditions against a baseline human profile.
+
+MVP inputs:
+- temperature
+- humidity
+- CO₂
+- PM2.5
+- VOC
+
+MVP output:
+- **Health state** (Green / Amber / Red)
+- **Confidence** (High / Medium / Low)
+- **Status since**
+- top reasons and advisory guidance
+- observed vs total signals coverage
+
+Profile model (MVP):
+- System default baseline profile in storage
+- Optional room-level profile override support
+- Preferred range and hard-limit checks per metric
+
 ---
 
 ## Start/Stop Measurement (Per Asset)
@@ -234,6 +271,11 @@ Why this matters:
 - You can compare room behavior across multiple sessions, times of day, and assets.
 - You can validate whether a room remains stable enough for sensitive assets (for example, artwork, instruments, or electronics).
 - You can make placement decisions using observed room behavior, not just one-point-in-time readings.
+
+How this works with People Health:
+- The People Health panel gives immediate room-health context.
+- Room Measurement History provides the time-based evidence behind that context.
+- Together they support both snapshot decisions and trend-based validation.
 
 ---
 
@@ -363,16 +405,16 @@ The result:
 | `quality_scale.yaml` | Tracks which Home Assistant Quality Scale rules have been satisfied for Bronze → Platinum progression. |
 | `const.py` | Shared constants used across the integration (domain name, signal names, service names). |
 | `models.py` | Core data models: `Asset`, `CustodyRecord`, `LoanRecord`, and supporting types. |
-| `coordinator.py` | `AssetIntelligenceCoordinator` — owns the runtime state, triggers refreshes, and dispatches change signals to entities. |
+| `coordinator.py` | `AssetIntelligenceCoordinator` — owns runtime state, triggers refreshes, computes room-level human-health projections, and dispatches change signals to entities. |
 | `asset_entity.py` | Base entity class shared by sensors and binary sensors; resolves the asset from coordinator data. |
-| `sensor.py` | Sensor entities: asset count, asset list, room environment readings. |
+| `sensor.py` | Sensor entities: asset count, asset list, room environment readings, and room-level people-health attributes. |
 | `binary_sensor.py` | Binary sensor entities: risk state and advisory flags per asset. |
 | `config_flow.py` | UI-driven config flow for setting up and reconfiguring the integration. |
-| `storage.py` | `AssetStore` — reads and writes asset data to HA's persistent JSON storage. |
+| `storage.py` | `AssetStore` — reads/writes persistent JSON storage, including system defaults and human-health profile baselines. |
 | `document_models.py` | Data classes for document records (receipts, appraisals, manuals, provenance). |
 | `document_storage.py` | `DocumentStorage` — manages file-level operations for linked asset documents on NAS/share. |
 | `environment.py` | Parses and normalises room environment sensor data into structured readings. |
-| `evaluation.py` | Evaluates environmental conditions against per-asset requirements to produce risk states. |
+| `evaluation.py` | Evaluates environmental conditions against per-asset requirements and room-level human-health profiles to produce risk/advisory states. |
 | `advisory.py` | Generates human-readable advisory text from evaluation results. |
 | `validation.py` | Input validation helpers used by service handlers to reject malformed payloads early. |
 | `panel.py` | Registers the custom frontend panel with HA's HTTP layer. |
