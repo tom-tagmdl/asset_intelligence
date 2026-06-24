@@ -8164,13 +8164,21 @@ _getAssetTimelineItems(attrs) {
       // ✅ Step 1 — Create asset (ONLY critical step)
       let assetCreated = false;
 
+      const selectedLabels = Array.isArray(draft?.label_ids)
+        ? draft.label_ids.filter((label) => typeof label === "string" && label.trim())
+        : [];
+      const fallbackDefaultLabels = this._getDefaultLabelIds();
+      const effectiveLabels = draft?.labels_touched
+        ? selectedLabels
+        : (selectedLabels.length ? selectedLabels : fallbackDefaultLabels);
+
       try {
         await this._callService("asset_intelligence", "add_asset", {
           asset_id: assetId,
           name: rawName,
           asset_type: draft.asset_type,
           area_id: draft.area_id,
-          labels: draft.label_ids || []
+          labels: effectiveLabels
         });
 
         assetCreated = true;
@@ -11055,7 +11063,8 @@ _getAssetTimelineItems(attrs) {
       name: "",
       area_id: roomId,
       device_id: null,
-      label_ids: [...defaultLabelIds]
+      label_ids: [...defaultLabelIds],
+      labels_touched: false,
     };
 
     const dialog = document.createElement("ha-dialog");
@@ -11328,6 +11337,7 @@ _getAssetTimelineItems(attrs) {
 
       // Labels
       labelPicker.addEventListener("value-changed", (e) => {
+        this._assetDraft.labels_touched = true;
         this._assetDraft.label_ids = e.detail?.value || [];
       });
 

@@ -1093,7 +1093,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             payload.pop("labels", payload.pop("label_ids", None))
         )
         if explicit_labels is None:
-            explicit_labels = set()
+            system_defaults = dict(getattr(store, "system_defaults", {}) or {})
+            explicit_labels = _normalize_explicit_labels(
+                system_defaults.get("default_label_ids") or []
+            ) or set()
 
         now = _now_iso_local()
         payload.setdefault("created_at", now)
