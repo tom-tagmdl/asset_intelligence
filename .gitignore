@@ -37,3 +37,4 @@ ha_run.lock
 *.yaml
 !services.yaml
 !quality_scale.yaml
+!.github/workflows/*.yaml
