@@ -72,6 +72,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._roomHistoryFilterByRoom = {};
     this._roomHistoryAssetFilterByRoom = {};
     this._measurementTicker = null;
+    this._assetDetailInteractionActive = false;
+    this._assetDetailInteractionTimer = null;
     // ✅ Cache for authenticated protected image blob URLs
     this._protectedImageBlobCache = {};
 
@@ -150,6 +152,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       !!this._assetInfoDrafts?.[currentAssetId] &&
       Object.keys(this._assetInfoDrafts[currentAssetId]).length > 0;
 
+    if (this._assetDetailInteractionActive && this._view?.type === "asset-detail") {
+      return;
+    }
+
     if (!this._loaded) {
       this._load();
       return;
@@ -227,33 +233,57 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       if (!entity || typeof entity !== "object" || !entity.entity_id) return false;
       if (!entity.entity_id.startsWith(requiredPrefix)) return false;
 
+      const matchesMetricType = this._matchesMetricEntityType(entity, metricDef);
+      if (showAll) {
+        return matchesMetricType;
+      }
+
       const entityAreaId = this._getAreaIdForEntity(entity.entity_id);
       if (entityAreaId !== roomId) return false;
-      if (showAll) return true;
 
-      const attrs = entity.attributes || {};
-      const deviceClass = String(attrs.device_class || "").toLowerCase();
-      const unit = String(attrs.unit_of_measurement || "").toLowerCase();
-      const normalized = `${entity.entity_id} ${attrs.friendly_name || ""}`.toLowerCase();
-
-      if (requiredDeviceClass) {
-        return deviceClass === requiredDeviceClass;
-      }
-
-      const matchesName =
-        nameIncludes.length > 0 &&
-        nameIncludes.some((token) => normalized.includes(token));
-
-      const matchesUnit =
-        unitIncludes.length > 0 &&
-        unitIncludes.some((token) => unit.includes(token));
-
-      if (nameIncludes.length > 0 || unitIncludes.length > 0) {
-        return matchesName || matchesUnit;
-      }
-
-      return true;
+      return matchesMetricType;
     };
+  }
+
+  _matchesMetricEntityType(entity, metricDef) {
+    if (!entity || typeof entity !== "object" || !metricDef || typeof metricDef !== "object") {
+      return false;
+    }
+
+    const attrs = entity.attributes || {};
+    const deviceClass = String(attrs.device_class || "").toLowerCase();
+    const unit = String(attrs.unit_of_measurement || "").toLowerCase();
+    const normalized = `${entity.entity_id} ${attrs.friendly_name || ""}`.toLowerCase();
+
+    const requiredDeviceClass = String(metricDef.deviceClass || "").toLowerCase();
+    if (requiredDeviceClass && deviceClass === requiredDeviceClass) {
+      return true;
+    }
+
+    const nameIncludes = Array.isArray(metricDef.nameIncludes)
+      ? metricDef.nameIncludes.map((token) => String(token).toLowerCase())
+      : [];
+    const unitIncludes = Array.isArray(metricDef.unitIncludes)
+      ? metricDef.unitIncludes.map((token) => String(token).toLowerCase())
+      : [];
+
+    const matchesName =
+      nameIncludes.length > 0 &&
+      nameIncludes.some((token) => normalized.includes(token));
+
+    const matchesUnit =
+      unitIncludes.length > 0 &&
+      unitIncludes.some((token) => unit.includes(token));
+
+    if (nameIncludes.length > 0 || unitIncludes.length > 0) {
+      return matchesName || matchesUnit;
+    }
+
+    if (requiredDeviceClass) {
+      return deviceClass === requiredDeviceClass;
+    }
+
+    return true;
   }
 
   _applyHassToHAElements() {
@@ -921,6 +951,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         !!this._assetInfoDrafts?.[currentAssetId] &&
         Object.keys(this._assetInfoDrafts[currentAssetId]).length > 0;
 
+      if (this._assetDetailInteractionActive && this._view?.type === "asset-detail") {
+      return;
+    }
+
       if (hasActiveAssetDraft) {
       return;
     }
@@ -1548,6 +1582,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           border-radius: 12px;
           padding: 14px;
           margin-bottom: 16px;
+          overflow: visible;
         }
 
         .ai-config-row {
@@ -1556,6 +1591,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           align-items: center;
           gap: 12px;
           padding: 4px 0;
+          overflow: visible;
         }
 
         ha-entity-picker.ai-config-dropdown {
@@ -1564,10 +1600,35 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           min-width: 320px;
         }
 
+        select.ai-config-dropdown {
+          display: block;
+          width: 100%;
+          min-width: 0;
+          box-sizing: border-box;
+          position: relative;
+          z-index: 2;
+        }
+
         .ai-config-row ha-entity-picker {
           display: block;
           width: 100%;
           min-width: 320px;
+        }
+
+        .ai-config-toggle {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-top: 2px;
+          font-size: 12px;
+          line-height: 1.2;
+          color: var(--secondary-text-color);
+          user-select: none;
+        }
+
+        .ai-config-toggle input[type="checkbox"] {
+          margin: 0;
+          flex: 0 0 auto;
         }
 
         .ai-config-readonly {
@@ -2754,6 +2815,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       this._initializeAssetDetailPickers();
     }
 
+    if (this._view?.type === "asset-detail") {
+      this._bindAssetDetailInteractionGuards();
+    }
+
     if (typeof this._applyHassToHAElements === "function") {
       this._applyHassToHAElements();
     }
@@ -3487,6 +3552,69 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._refreshAssetInfoSaveState();
   }
 
+  _bindAssetDetailInteractionGuards() {
+    const shell = this.querySelector(".ai-asset-shell");
+    if (!shell) return;
+
+    if (this._assetDetailInteractionBoundShell === shell) return;
+
+    const isEditableControl = (target) => {
+      if (!(target instanceof HTMLElement)) return false;
+      return !!target.closest("input, select, textarea, ha-entity-picker, ha-area-picker, ha-labels-picker, ha-selector, .ai-form-control");
+    };
+
+    const keepActive = () => {
+      this._assetDetailInteractionActive = true;
+      if (this._assetDetailInteractionTimer) {
+        clearTimeout(this._assetDetailInteractionTimer);
+        this._assetDetailInteractionTimer = null;
+      }
+    };
+
+    const releaseSoon = () => {
+      if (this._assetDetailInteractionTimer) {
+        clearTimeout(this._assetDetailInteractionTimer);
+      }
+      this._assetDetailInteractionTimer = setTimeout(() => {
+        const active = document.activeElement;
+        const stillInside = active instanceof HTMLElement && !!active.closest(".ai-asset-shell");
+        if (!stillInside) {
+          this._assetDetailInteractionActive = false;
+        }
+        this._assetDetailInteractionTimer = null;
+      }, 350);
+    };
+
+    shell.addEventListener("pointerdown", (event) => {
+      if (!isEditableControl(event.target)) return;
+      keepActive();
+    }, true);
+
+    shell.addEventListener("focusin", (event) => {
+      if (!isEditableControl(event.target)) return;
+      keepActive();
+    }, true);
+
+    shell.addEventListener("focusout", (event) => {
+      if (!isEditableControl(event.target)) return;
+      releaseSoon();
+    }, true);
+
+    shell.addEventListener("input", (event) => {
+      if (!isEditableControl(event.target)) return;
+      keepActive();
+      releaseSoon();
+    }, true);
+
+    shell.addEventListener("change", (event) => {
+      if (!isEditableControl(event.target)) return;
+      keepActive();
+      releaseSoon();
+    }, true);
+
+    this._assetDetailInteractionBoundShell = shell;
+  }
+
   _collectAssetInfoValuesFromDom(asset) {
     const attrs = asset?.attributes || {};
     const assetId = asset?.attributes?.asset_id || this._view?.assetId || "";
@@ -3987,7 +4115,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                     </div>
 
                     <!-- Column 2 -->
-                    <div style="display:flex; gap:10px; align-items:center;">
+                    <div style="display:flex; flex-direction:column; gap:8px; align-items:stretch; min-width:0; overflow:visible;">
 
                       ${
                         isEditing
@@ -4516,14 +4644,14 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                               ></ha-entity-picker>
 
                               <label
-                                style="display:flex; align-items:center; gap:8px; font-size:12px; color: var(--secondary-text-color);"
+                                class="ai-config-toggle"
                               >
                                 <input
                                   type="checkbox"
                                   data-show-all-sensors="${fieldPath}"
                                   ${this._showAllSensorsByMetric?.[fieldPath] ? "checked" : ""}
                                 />
-                                Show all entities in this room
+                                Show all sensors of this type
                               </label>
                             </div>
 
@@ -7094,7 +7222,6 @@ _getAssetTimelineItems(attrs) {
 
       const handleChange = () => {
         applyDraftValue();
-        this._render();
       };
 
       el.addEventListener("input", handleInput);
@@ -7118,7 +7245,6 @@ _getAssetTimelineItems(attrs) {
 
       const handleChange = () => {
         applyDraftValue();
-        this._render();
       };
 
       el.addEventListener("input", handleInput);
