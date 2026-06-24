@@ -1,7 +1,7 @@
 {
   "domain": "asset_intelligence",
   "name": "Asset Intelligence",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "documentation": "https://github.com/tom-tagmdl/asset_intelligence",
   "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
   "iot_class": "local_polling",
