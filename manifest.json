@@ -2,7 +2,7 @@
   "domain": "asset_intelligence",
   "name": "Asset Intelligence",
   "version": "0.0.4",
-  "documentation": "https://github.com/tom-tagmdl/asset_intelligence",
+  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started",
   "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
   "iot_class": "local_polling",
   "config_flow": true,
