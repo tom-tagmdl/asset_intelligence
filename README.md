@@ -199,6 +199,27 @@ Why this matters:
 - Users can understand room-level safety context before reading raw sensor values.
 - It provides a faster decision path for placement and remediation actions.
 
+### Room Confidence Drivers (Room Detail)
+
+Room Detail now includes a dedicated **Room Confidence Drivers** panel that explains exactly why the room confidence is what it is.
+
+What it shows:
+- **Coverage**: how many configured signals are actively reporting data (e.g. 4/5 — 80%)
+- **Configured signals**: total count of sensors mapped to this room
+- **Signals reporting**: count of sensors returning live values
+- **Signals missing**: count of configured sensors with no data
+- **Confidence summary**: a plain-language explanation of why confidence is Good, Partial, Degraded, or Stale
+- **Missing signal names**: which specific sensor slots are empty
+- **Reporting signal names**: which slots are actively contributing
+
+Quick fix link:
+- A **Configure sensors** link next to the missing signals list navigates directly to Room Configuration to fix gaps without manual navigation.
+
+Why this matters:
+- Users often see "Partial" or "Degraded" confidence with no clear cause.
+- This panel surfaces exactly which sensors are missing data so users can assign or fix them.
+- Confidence is not just a status — it reflects how much real-world evidence backs the room's risk and people-health assessments.
+
 ### People Health (MVP)
 
 Room Detail now includes a dedicated **People Health** panel that evaluates room conditions against a baseline human profile.
