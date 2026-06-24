@@ -291,61 +291,61 @@ attach_document:
         source: "personal_archive"
         version: 1
 
-  update_document_metadata:
-    name: Update Document Metadata
-    description: Update metadata on an existing document record without re-uploading or re-attaching
-    fields:
-      actor:
-        name: Actor
-        required: false
-        example: "Tom"
+update_document_metadata:
+  name: Update Document Metadata
+  description: Update metadata on an existing document record without re-uploading or re-attaching
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
 
-      asset_id:
-        name: Asset ID
-        required: true
-        example: "art_001"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
 
-      document_id:
-        name: Document ID
-        description: Existing document ID to update
-        required: false
-        example: "appraisal_2026"
+    document_id:
+      name: Document ID
+      description: Existing document ID to update
+      required: false
+      example: "appraisal_2026"
 
-      provider_document_id:
-        name: Provider Document ID
-        description: Alternate identifier for selecting the document
-        required: false
-        example: "https://vault.example.com/policies/policy_2026.pdf"
+    provider_document_id:
+      name: Provider Document ID
+      description: Alternate identifier for selecting the document
+      required: false
+      example: "https://vault.example.com/policies/policy_2026.pdf"
 
-      type:
-        name: Document Type
-        description: Updated logical type
-        required: false
-        example: "insurance_policy"
+    type:
+      name: Document Type
+      description: Updated logical type
+      required: false
+      example: "insurance_policy"
 
-      title:
-        name: Title
-        description: Updated human-friendly title
-        required: false
-        example: "Insurance Policy 2026"
+    title:
+      name: Title
+      description: Updated human-friendly title
+      required: false
+      example: "Insurance Policy 2026"
 
-      date:
-        name: Document Date
-        description: Updated document date
-        required: false
-        example: "2026-05-01"
+    date:
+      name: Document Date
+      description: Updated document date
+      required: false
+      example: "2026-05-01"
 
-      notes:
-        name: Notes
-        description: Updated notes
-        required: false
-        example: "Updated filing location note"
+    notes:
+      name: Notes
+      description: Updated notes
+      required: false
+      example: "Updated filing location note"
 
-      tags:
-        name: Tags
-        description: Replace tags with this list
-        required: false
-        example: ["insurance", "policy"]
+    tags:
+      name: Tags
+      description: Replace tags with this list
+      required: false
+      example: ["insurance", "policy"]
 
 delete_document:
   name: Delete Document

@@ -7,9 +7,9 @@
   "iot_class": "local_polling",
   "config_flow": true,
   "integration_type": "hub",
-  "homeassistant": "2024.1.0",
+  "homeassistant": "2024.1",
   "requirements": [],
-  "dependencies": [],
+  "dependencies": ["http"],
   "codeowners": ["@tom-tagmdl"],
   "loggers": ["custom_components.asset_intelligence"]
 }

@@ -16,6 +16,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.core import Event, HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.util import dt as dt_util
@@ -42,6 +43,8 @@ MAX_INLINE_UPLOAD_BYTES = 15 * 1024 * 1024
 DATA_SERVICES_REGISTERED = "_services_registered"
 DATA_TRACKER_LISTENER_UNSUB = "_tracker_listener_unsub"
 DATA_DOCUMENT_VIEW_REGISTERED = "_document_view_registered"
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 REGISTERED_SERVICES: tuple[str, ...] = (
     "add_asset",
