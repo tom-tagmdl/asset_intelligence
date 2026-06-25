@@ -1275,6 +1275,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           background: #f5f5f5;
         }
 
+        .ai-gear-button ha-icon {
+          display: block;
+          --mdc-icon-size: 18px;
+        }
+
         .ai-icon-wrap {
           width: 72px;
           height: 72px;
@@ -1320,6 +1325,14 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           color: inherit;
           cursor: pointer;
           font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .ai-floor-button ha-icon {
+          display: block;
+          --mdc-icon-size: 18px;
         }
 
         .ai-floor-button:hover {
@@ -2110,6 +2123,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           cursor: pointer;
           font-size: 18px;
           line-height: 1;
+        }
+
+        .ai-overflow-button ha-icon {
+          display: block;
+          --mdc-icon-size: 20px;
         }
 
         .ai-overflow-menu {
@@ -3175,7 +3193,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                 <div class="ai-floor">
                   <div class="ai-floor-title">
                     <button class="ai-floor-button" data-floor="${this._escapeHtml(floor)}">
-                      ðŸ  ${this._escapeHtml(floor)}
+                      <ha-icon icon="mdi:home"></ha-icon>
+                      <span>${this._escapeHtml(floor)}</span>
                     </button>
                   </div>
 
@@ -3300,10 +3319,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     });
     const missingSignalLabels = configuredEntries
       .filter(([, meta]) => !meta.has_data)
-      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " â€¢ ")));
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
     const reportingSignalLabels = configuredEntries
       .filter(([, meta]) => !!meta.has_data)
-      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " â€¢ ")));
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
     const roomConfidenceSummary = (() => {
       const normalized = String(attrs.confidence || "").toUpperCase();
       if (normalized === "GOOD") {
@@ -3389,7 +3408,9 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         <div class="ai-header-body">
           <div class="ai-header-top">
             <div class="ai-header-title">${this._escapeHtml(roomName)}</div>
-            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration">âš™ï¸</button>
+            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration" aria-label="Room configuration">
+              <ha-icon icon="mdi:cog"></ha-icon>
+            </button>
           </div>
 
           <div class="ai-header-grid">
@@ -3456,7 +3477,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                       .map((w, idx) => `
                         <div class="ai-group-row">
                           <span class="ai-muted">Window ${idx + 1}</span>
-                          <span>${this._escapeHtml(w.direction || "â€”")}</span>
+                          <span>${this._escapeHtml(w.direction || "-")}</span>
                         </div>
                       `).join("")
               }
@@ -3529,12 +3550,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                 </div>
 
                 <div class="ai-group-card" style="margin-bottom:12px;">
-                  <div class="ai-group-title">Signals currently missing â€” <button class="ai-link-btn" style="font-size:12px;" data-room-config="${this._escapeHtml(roomId)}">Configure sensors</button></div>
+                  <div class="ai-group-title">Signals currently missing — <button class="ai-link-btn" style="font-size:12px;" data-room-config="${this._escapeHtml(roomId)}">Configure sensors</button></div>
                   ${missingSignalLabels.length
                     ? missingSignalLabels.slice(0, 5).map((label) => `
                         <div class="ai-group-row"><span class="ai-muted">Missing</span><span>${this._escapeHtml(label)}</span></div>
                       `).join("")
-                    : `<div class="ai-group-row"><span class="ai-muted">Missing</span><span>None â€” all configured signals are reporting</span></div>`
+                    : `<div class="ai-group-row"><span class="ai-muted">Missing</span><span>None — all configured signals are reporting</span></div>`
                   }
                 </div>
 
@@ -3776,7 +3797,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           source: "audit",
           title,
           meta: this._formatLocalDateTime(timestampValue),
-          copy: copyParts.join(" â€¢ "),
+          copy: copyParts.join(" - "),
           details: {
             event_type: isStopMeasurement ? "stop" : "start",
             room_id: normalizedRoomId,
@@ -3807,7 +3828,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       : 0;
     const lastSessionAt = lastSessionTs > 0
       ? this._formatLocalDateTime(new Date(lastSessionTs).toISOString())
-      : "â€”";
+      : "-";
 
     const observationValues = completedSessions
       .map((entry) => Number(entry?.details?.observation_count ?? NaN))
@@ -3820,7 +3841,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       roomAssetCount: Number.isFinite(Number(roomAssetCount)) ? Number(roomAssetCount) : 0,
       sessionCount,
       lastSessionAt,
-      avgObservationsText: avgObservations === null ? "â€”" : String(Math.round(avgObservations * 10) / 10),
+      avgObservationsText: avgObservations === null ? "-" : String(Math.round(avgObservations * 10) / 10),
     };
   }
 
@@ -4639,10 +4660,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                           `
                           : `
                             <span class="ai-tag">
-                              ${this._escapeHtml(this._titleCase(w.direction || "â€”"))}
+                              ${this._escapeHtml(this._titleCase(w.direction || "-"))}
                             </span>
                             <span class="ai-tag">
-                              ${this._escapeHtml(this._titleCase(w.exposure || "â€”"))}
+                              ${this._escapeHtml(this._titleCase(w.exposure || "-"))}
                             </span>
                           `
                       }
@@ -4774,7 +4795,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
             <span>
               Assets: <strong>${assetCount}</strong>
               ${atRiskCount > 0 ? `
-                <span class="ai-separator">â€¢</span>
+                <span class="ai-separator">&middot;</span>
                 <span class="ai-risk-badge">${atRiskCount} at risk</span>
               ` : ""}
 
@@ -4856,7 +4877,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const roomAreaId = this._resolveAssetRoomAreaId(attrs, assetEntity.entity_id);
     const roomArea = roomAreaId ? areaMap[roomAreaId] : null;
     const roomName = roomArea?.name || (roomAreaId ? this._titleCase(String(roomAreaId).replaceAll("_", " ")) : "No Room");
-    const assetType = attrs.asset_type || attrs.type || "â€”";
+    const assetType = attrs.asset_type || attrs.type || "-";
     const documentCount = attrs.document_count ?? 0;
     const updatedText = this._formatLocalDateTime(
       attrs.room_last_updated || attrs.updated_at || assetEntity.last_updated
@@ -4923,20 +4944,20 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const icon = this._getAssetIcon(attrs.asset_type, deviceMeta.labels);
 
 
-    const assetTypeRaw = attrs.asset_type || attrs.type || "â€”";
-    const assetType = assetTypeRaw && assetTypeRaw !== "â€”"
+    const assetTypeRaw = attrs.asset_type || attrs.type || "-";
+    const assetType = assetTypeRaw && assetTypeRaw !== "-"
       ? this._titleCase(String(assetTypeRaw).replaceAll("_", " "))
-      : "â€”";
+      : "-";
 
     const labelSummary = this._summarizeLabels(deviceMeta.labels, assetTypeRaw);
 
     const locationDetail =
-      attrs.location_detail || "â€”";
+      attrs.location_detail || "-";
 
     const insuranceDescription =
       attrs.descriptions?.insurance ||
       attrs.insurance_description ||
-      "â€”";
+      "-";
 
     const atRiskValue = String(
       attrs.environment_risk_state ||
@@ -4983,7 +5004,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     let riskReasonTooltip =
       rawReasons.length > 0
-        ? rawReasons.join(" â€¢ ")
+        ? rawReasons.join(" • ")
         : (atRiskValue === "UNCONFIGURED"
             ? "No environmental limits configured"
             : "No active environmental risk");
@@ -4998,7 +5019,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     const environmentStateSinceText = environmentStateSinceRaw
       ? this._formatLocalDateTime(environmentStateSinceRaw)
-      : "â€”";
+      : "-";
 
     const atRiskColor = this._stateColor(atRiskValue);
 
@@ -5316,14 +5337,14 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       attrs.holder ||
       custody.owner ||
       custody.holder ||
-      "â€”";
+      "-";
 
     const custodyLocationDetail =
       custody.location_detail ||
       custody.location ||
       attrs.location_detail ||
       this._readPath(attrs, "placement.location_detail") ||
-      "â€”";
+      "-";
 
     const custodyEffectiveAt = this._formatLocalDateTime(
       custody.effective_at || attrs.updated_at || asset.last_updated
@@ -5633,8 +5654,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                 class="ai-overflow"
                 data-asset-overflow="${this._escapeHtml(assetId)}"
               >
-                <button class="ai-overflow-button" type="button" title="More actions">
-                  â‹®
+                <button class="ai-overflow-button" type="button" title="More actions" aria-label="More actions">
+                  <ha-icon icon="mdi:dots-vertical"></ha-icon>
                 </button>
                 <div class="ai-overflow-menu">
                   ${measurementIsActive
@@ -5675,7 +5696,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           <div class="ai-asset-status-strip">
             <div
               class="ai-asset-status-cell ai-risk-cell ai-risk-${riskState.toLowerCase()}"
-              title="${this._escapeHtml(environmentReasons.length ? environmentReasons.join(' â€¢ ') : '')}"
+              title="${this._escapeHtml(environmentReasons.length ? environmentReasons.join(' . ') : '')}"
             >
               <div class="ai-asset-status-label">Risk</div>
               <div class="ai-asset-status-value">
@@ -6203,7 +6224,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
                     <div class="ai-readout-row">
                       <div class="ai-readout-label">Event count</div>
-                      <div class="ai-readout-value">${this._escapeHtml(String(attrs.environment_event_count ?? "â€”"))}</div>
+                      <div class="ai-readout-value">${this._escapeHtml(String(attrs.environment_event_count ?? "-"))}</div>
                     </div>
                   </div>
                 </div>
@@ -6403,12 +6424,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
               ? documents.map((doc, index) => {
                   const physical = this._resolvePhysicalDocumentLocation(doc, physicalLocations);
                   const title = doc?.title || doc?.filename || doc?.name || `Document ${index + 1}`;
-                  const type = this._titleCase(String(doc?.type || "â€”").replaceAll("_", " "));
-                  const date = doc?.date || doc?.created_at || "â€”";
+                  const type = this._titleCase(String(doc?.type || "-").replaceAll("_", " "));
+                  const date = doc?.date || doc?.created_at || "-";
                   const physicalLocationText = physical?.location
                     ? this._titleCase(String(physical.location).replaceAll("_", " "))
-                    : "â€”";
-                  const physicalNotesText = physical?.notes || "â€”";
+                    : "-";
+                  const physicalNotesText = physical?.notes || "-";
 
                   return `
                     <div class="ai-doc-card">
@@ -6708,14 +6729,14 @@ _getAssetEnvironmentDraft(assetId, attrs) {
 
       const unitLabel = (() => {
         const formatted = this._formatEnvironmentMetricValue(categoryKey, metricKey, 1);
-        if (!formatted || formatted === "â€”") return "";
+        if (!formatted || formatted === "-") return "";
         const raw = String(formatted);
 
-        if (raw.endsWith(" Â°F")) return "Â°F";
+        if (raw.endsWith(" °F")) return "°F";
         if (raw.endsWith(" %")) return "%";
         if (raw.endsWith(" lx")) return "lx";
         if (raw.endsWith(" ppb")) return "ppb";
-        if (raw.endsWith(" Âµg/mÂ³")) return "Âµg/mÂ³";
+        if (raw.endsWith(" µg/m³")) return "µg/m³";
         if (raw.endsWith(" hPa")) return "hPa";
         if (raw.endsWith(" mm/s")) return "mm/s";
         if (raw.endsWith(" dB")) return "dB";
@@ -7044,7 +7065,7 @@ _getAssetTimelineItems(attrs) {
         const raw = String(evt?.action || evt?.message || "").trim();
         if (!raw) return;
 
-        const structuredEntryPattern = /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\s+â€”\s+/;
+        const structuredEntryPattern = /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\s+(?:—|-)\s+/;
         if (!structuredEntryPattern.test(raw)) {
           pushAuditEntry(
             timestampValue,
@@ -7076,7 +7097,7 @@ _getAssetTimelineItems(attrs) {
           const cleaned = entry.trim().replace(/^,+|,+$/g, "");
 
           const match = cleaned.match(
-            /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+â€”\s+(.*?)\s+â†’\s+(.*)$/
+            /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+(?:—|-)\s+(.*?)\s+(?:→|->)\s+(.*)$/
           );
 
           if (match) {
@@ -7107,7 +7128,7 @@ _getAssetTimelineItems(attrs) {
         const cleaned = entry.trim().replace(/^,+|,+$/g, "");
 
         const match = cleaned.match(
-          /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+â€”\s+(.*?)\s+â†’\s+(.*)$/
+          /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+(?:—|-)\s+(.*?)\s+(?:→|->)\s+(.*)$/
         );
 
         if (match) {
@@ -7257,7 +7278,7 @@ _getAssetTimelineItems(attrs) {
     return "amber";
   }
 
-  _renderStructuredReadoutValue(value, emptyText = "â€”") {
+  _renderStructuredReadoutValue(value, emptyText = "-") {
     if (value === null || value === undefined || value === "") {
       return `<span class="ai-readout-muted">${this._escapeHtml(emptyText)}</span>`;
     }
@@ -7294,7 +7315,7 @@ _getAssetTimelineItems(attrs) {
             } else if (rawVal && typeof rawVal === "object") {
               displayVal = JSON.stringify(rawVal);
             } else if (rawVal === null || rawVal === undefined || rawVal === "") {
-              displayVal = "â€”";
+              displayVal = "-";
             } else {
               displayVal = String(rawVal);
             }
@@ -7393,8 +7414,8 @@ _getAssetTimelineItems(attrs) {
     const normalized = exposureRisk || this._normalizeExposureRisk(null);
     const levelText = this._titleCase(String(normalized.level || "Unknown").replaceAll("_", " ").toLowerCase());
     const reasons = Array.isArray(normalized.reasons) ? normalized.reasons : [];
-    const azimuthText = normalized.azimuth === null ? "â€”" : `${Number(normalized.azimuth).toFixed(2)}Â°`;
-    const elevationText = normalized.elevation === null ? "â€”" : `${Number(normalized.elevation).toFixed(2)}Â°`;
+    const azimuthText = normalized.azimuth === null ? "-" : `${Number(normalized.azimuth).toFixed(2)}°`;
+    const elevationText = normalized.elevation === null ? "-" : `${Number(normalized.elevation).toFixed(2)}°`;
 
     return `
       <div class="ai-readout-kv">
@@ -8436,7 +8457,15 @@ _getAssetTimelineItems(attrs) {
       .replaceAll("Ã¢â‚¬Â¦", "\u2026")
       .replaceAll("Ã¢Å¡â„¢Ã¯Â¸Â", "\u2699\uFE0F")
       .replaceAll("Ã¢ÂÂ³", "\u23F3")
-      .replaceAll("Ã¢â€¹Â®", "\u22EE");
+      .replaceAll("Ã¢â€¹Â®", "\u22EE")
+      .replaceAll("â€”", "—")
+      .replaceAll("â€¢", "•")
+      .replaceAll("â†’", "→")
+      .replaceAll("Â°F", "°F")
+      .replaceAll("Âµg/mÂ³", "µg/m³")
+      .replaceAll("Â°", "°")
+      .replace(/\bco2\b/gi, "CO₂")
+      .replace(/\bno2\b/gi, "NO₂");
   }
 
   _getAssetTypeOptions() {
@@ -8639,7 +8668,7 @@ _getAssetTimelineItems(attrs) {
   }
 
   _summarizeLabels(labels, assetType) {
-    if (!Array.isArray(labels) || labels.length === 0) return "\u2014";
+    if (!Array.isArray(labels) || labels.length === 0) return "-";
 
     const normalizedType = String(assetType || "")
       .trim()
@@ -8654,7 +8683,7 @@ _getAssetTimelineItems(attrs) {
       })
       .slice(0, 3);
 
-    return summary.length ? summary.join(" â€¢ ") : "â€”";
+    return summary.length ? summary.join(" • ") : "-";
   }
 
   _renderBreadcrumb(items) {
@@ -8927,9 +8956,8 @@ _getAssetTimelineItems(attrs) {
     if (!text) return "\u2014";
 
     const normalizedUnit = this._normalizeDisplayText(unit || "").trim();
-    const needsSpace = /^[a-zA-Z]/.test(normalizedUnit);
     const formatted = normalizedUnit
-      ? (needsSpace ? `${text} ${normalizedUnit}` : `${text}${normalizedUnit}`)
+      ? `${text} ${normalizedUnit}`
       : text;
 
     return this._escapeHtml(formatted);
@@ -9179,7 +9207,7 @@ _getAssetTimelineItems(attrs) {
         const fallbackLabel = loanId ? `${loanId} - ${counterparty}` : counterparty;
         return {
           loanId,
-          label: started && started !== "â€”"
+          label: started && started !== "-"
             ? `${counterparty} (${started})`
             : fallbackLabel,
         };
@@ -10182,12 +10210,12 @@ _getAssetTimelineItems(attrs) {
         ? response.exists
         : undefined;
 
-      const providerText = response?.provider || localDoc.provider || "â€”";
+      const providerText = response?.provider || localDoc.provider || "-";
       const availabilityText = available === true ? "Available" : available === false ? "Unavailable" : "Unknown";
       const existsText = exists === true ? "Exists" : exists === false ? "Missing" : "Unknown";
 
       window.alert(
-        `Availability check\n\nDocument: ${localDoc.title || localDoc.filename || localDoc.document_id || "â€”"}\nProvider: ${providerText}\nStatus: ${availabilityText}\nStorage file: ${existsText}`
+        `Availability check\n\nDocument: ${localDoc.title || localDoc.filename || localDoc.document_id || "-"}\nProvider: ${providerText}\nStatus: ${availabilityText}\nStorage file: ${existsText}`
       );
     } catch (err) {
       console.error("Document availability check failed", err);
@@ -10601,8 +10629,8 @@ _getAssetTimelineItems(attrs) {
     if (!window.customElements?.get?.("ha-dialog")) {
       const fallbackText = [
         `Type: ${String(safeItem.kind || "Unknown")}`,
-        `When: ${String(safeItem.meta || "â€”")}`,
-        `Summary: ${String(safeItem.copy || safeItem.title || "â€”")}`,
+        `When: ${String(safeItem.meta || "-")}`,
+        `Summary: ${String(safeItem.copy || safeItem.title || "-")}`,
         "",
         "Details:",
         JSON.stringify(details, null, 2),
@@ -10613,9 +10641,9 @@ _getAssetTimelineItems(attrs) {
 
     const baseRows = [
       ["Type", this._titleCase(String(safeItem.kind || "unknown").replaceAll("_", " "))],
-      ["When", String(safeItem.meta || "â€”")],
-      ["Title", String(safeItem.title || "â€”")],
-      ["Summary", String(safeItem.copy || "â€”")],
+      ["When", String(safeItem.meta || "-")],
+      ["Title", String(safeItem.title || "-")],
+      ["Summary", String(safeItem.copy || "-")],
     ];
 
     const detailRows = Object.entries(details)
@@ -10726,7 +10754,7 @@ _getAssetTimelineItems(attrs) {
 
     const observationPeriod = Number(baseline.observation_period || 0);
     const formatDuration = (seconds) => {
-      if (!Number.isFinite(seconds) || seconds <= 0) return "â€”";
+      if (!Number.isFinite(seconds) || seconds <= 0) return "-";
       const total = Math.floor(seconds);
       const hh = String(Math.floor(total / 3600)).padStart(2, "0");
       const mm = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
@@ -10734,12 +10762,29 @@ _getAssetTimelineItems(attrs) {
       return `${hh}:${mm}:${ss}`;
     };
 
+    const resolveMetricUnit = (metric) => {
+      const explicit = this._normalizeDisplayText(metric?.unit || "").trim();
+      if (explicit) return explicit;
+
+      const text = String(`${metric?.key || ""} ${metric?.name || ""}`).toLowerCase();
+      if (text.includes("temperature") || text.includes("dew point")) return "°F";
+      if (text.includes("humidity")) return "%";
+      if (text.includes("lux")) return "lx";
+      if (text.includes("voc") || text.includes("formaldehyde") || text.includes("ozone") || text.includes("no2")) return "ppb";
+      if (text.includes("pm2.5") || text.includes("pm10") || text.includes("particulates")) return "µg/m³";
+      if (text.includes("pressure")) return "hPa";
+      if (text.includes("vibration")) return "mm/s";
+      if (text.includes("noise")) return "dB";
+      if (text.includes("co2")) return "ppm";
+      return "";
+    };
+
     const baselineRows = [
       ["Observation count", baseline.observation_count],
-      ["Observation start", baseline.observation_start ? this._formatLocalDateTime(baseline.observation_start) : "â€”"],
-      ["Observation end", baseline.observation_end ? this._formatLocalDateTime(baseline.observation_end) : "â€”"],
+      ["Observation start", baseline.observation_start ? this._formatLocalDateTime(baseline.observation_start) : "-"],
+      ["Observation end", baseline.observation_end ? this._formatLocalDateTime(baseline.observation_end) : "-"],
       ["Observation period", formatDuration(observationPeriod)],
-      ["Confidence", baseline.confidence || "â€”"],
+      ["Confidence", baseline.confidence || "-"],
     ];
 
     if (baseline.avg_temperature !== undefined && baseline.avg_temperature !== null) {
@@ -10759,7 +10804,7 @@ _getAssetTimelineItems(attrs) {
       .map(([label, value]) => `
         <div style="display:grid; grid-template-columns: 180px minmax(0,1fr); gap:10px; padding:7px 0; border-bottom:1px solid rgba(0,0,0,0.06);">
           <div style="font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.03em;">${this._escapeHtml(String(label))}</div>
-          <div style="font-size:14px; color:var(--primary-text-color);">${this._escapeHtml(String(value ?? "â€”"))}</div>
+          <div style="font-size:14px; color:var(--primary-text-color);">${this._escapeHtml(String(value ?? "-"))}</div>
         </div>
       `)
       .join("");
@@ -10768,23 +10813,23 @@ _getAssetTimelineItems(attrs) {
       .slice(0, 120)
       .map((metric) => {
         if (!metric || typeof metric !== "object") return "";
-        const name = String(metric.name || metric.key || "Metric");
-        const unit = metric.unit ? String(metric.unit) : "";
-        const avg = metric.avg ?? "â€”";
-        const min = metric.min ?? "â€”";
-        const max = metric.max ?? "â€”";
-        const last = metric.last ?? "â€”";
-        const samples = metric.samples ?? "â€”";
+        const name = this._normalizeDisplayText(String(metric.name || metric.key || "Metric"));
+        const unit = resolveMetricUnit(metric);
+        const avg = metric.avg ?? "-";
+        const min = metric.min ?? "-";
+        const max = metric.max ?? "-";
+        const last = metric.last ?? "-";
+        const samples = metric.samples ?? "-";
         const suffix = unit ? ` ${unit}` : "";
         return `
           <div style="padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
             <div style="font-size:13px; font-weight:700; color:var(--primary-text-color); margin-bottom:4px;">${this._escapeHtml(name)}</div>
             <div style="font-size:13px; color:var(--secondary-text-color); line-height:1.45;">
               Average: <strong>${this._escapeHtml(String(avg))}${this._escapeHtml(suffix)}</strong>
-              â€¢ Min: ${this._escapeHtml(String(min))}${this._escapeHtml(suffix)}
-              â€¢ Max: ${this._escapeHtml(String(max))}${this._escapeHtml(suffix)}
-              â€¢ Last: ${this._escapeHtml(String(last))}${this._escapeHtml(suffix)}
-              â€¢ Samples: ${this._escapeHtml(String(samples))}
+              • Min: ${this._escapeHtml(String(min))}${this._escapeHtml(suffix)}
+              • Max: ${this._escapeHtml(String(max))}${this._escapeHtml(suffix)}
+              • Last: ${this._escapeHtml(String(last))}${this._escapeHtml(suffix)}
+              • Samples: ${this._escapeHtml(String(samples))}
             </div>
           </div>
         `;
@@ -10814,7 +10859,7 @@ _getAssetTimelineItems(attrs) {
 
   _renderActivityDialogValue(value) {
     if (value === null || value === undefined || value === "") {
-      return `<span style="color:var(--secondary-text-color);">â€”</span>`;
+      return `<span style="color:var(--secondary-text-color);">-</span>`;
     }
 
     if (Array.isArray(value)) {
@@ -11483,7 +11528,7 @@ _getAssetTimelineItems(attrs) {
   }
 
   _formatLocalDateTime(value) {
-    if (!value) return "â€”";
+    if (!value) return "-";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return String(value);
 
@@ -11518,7 +11563,7 @@ _getAssetTimelineItems(attrs) {
   _compactReason(value) {
     const text = String(value || "").trim().replace(/\.$/, "");
     if (!text) return "Environmental Risk";
-    return text.length > 32 ? `${text.slice(0, 29)}â€¦` : text;
+    return text.length > 32 ? `${text.slice(0, 29)}...` : text;
   }
 
 
@@ -11527,7 +11572,15 @@ _getAssetTimelineItems(attrs) {
   }
 
   _escapeHtml(value) {
-    return String(value ?? "")
+    const normalized = String(value ?? "")
+      .replaceAll("â€”", "—")
+      .replaceAll("â€¢", "•")
+      .replaceAll("â€¦", "...")
+      .replaceAll("â†’", "->")
+      .replaceAll("Âµg/mÂ³", "µg/m³")
+      .replaceAll("Â°", "°");
+
+    return normalized
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")

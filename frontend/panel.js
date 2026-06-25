@@ -1075,6 +1075,11 @@ class AssetIntelligenceApp extends HTMLElement {
           background: #f5f5f5;
         }
 
+        .ai-gear-button ha-icon {
+          display: block;
+          --mdc-icon-size: 18px;
+        }
+
         .ai-icon-wrap {
           width: 72px;
           height: 72px;
@@ -1120,6 +1125,14 @@ class AssetIntelligenceApp extends HTMLElement {
           color: inherit;
           cursor: pointer;
           font-weight: 700;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .ai-floor-button ha-icon {
+          display: block;
+          --mdc-icon-size: 18px;
         }
 
         .ai-floor-button:hover {
@@ -1770,6 +1783,11 @@ class AssetIntelligenceApp extends HTMLElement {
           cursor: pointer;
           font-size: 18px;
           line-height: 1;
+        }
+
+        .ai-overflow-button ha-icon {
+          display: block;
+          --mdc-icon-size: 20px;
         }
 
         .ai-overflow-menu {
@@ -2764,7 +2782,8 @@ class AssetIntelligenceApp extends HTMLElement {
                 <div class="ai-floor">
                   <div class="ai-floor-title">
                     <button class="ai-floor-button" data-floor="${this._escapeHtml(floor)}">
-                      🏠 ${this._escapeHtml(floor)}
+                      <ha-icon icon="mdi:home"></ha-icon>
+                      <span>${this._escapeHtml(floor)}</span>
                     </button>
                   </div>
 
@@ -2891,7 +2910,9 @@ class AssetIntelligenceApp extends HTMLElement {
         <div class="ai-header-body">
           <div class="ai-header-top">
             <div class="ai-header-title">${this._escapeHtml(roomName)}</div>
-            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration">⚙️</button>
+            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration" aria-label="Room configuration">
+              <ha-icon icon="mdi:cog"></ha-icon>
+            </button>
           </div>
 
           <div class="ai-header-grid">
@@ -4626,8 +4647,8 @@ class AssetIntelligenceApp extends HTMLElement {
                 class="ai-overflow"
                 data-asset-overflow="${this._escapeHtml(assetId)}"
               >
-                <button class="ai-overflow-button" type="button" title="More actions">
-                  ⋮
+                <button class="ai-overflow-button" type="button" title="More actions" aria-label="More actions">
+                  <ha-icon icon="mdi:dots-vertical"></ha-icon>
                 </button>
                 <div class="ai-overflow-menu">
                   <button
@@ -7876,8 +7897,8 @@ _getAssetTimelineItems(attrs) {
 
     if (!text) return "—";
 
-    const needsSpace = /^[a-zA-Zµ]/.test(unit);
-    const formatted = needsSpace ? `${text} ${unit}` : `${text}${unit}`;
+    const normalizedUnit = String(unit || "").trim();
+    const formatted = normalizedUnit ? `${text} ${normalizedUnit}` : text;
 
     return this._escapeHtml(formatted);
   }
