@@ -6491,19 +6491,29 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 _getAssetEnvironmentDraft(assetId, attrs) {
     if (!assetId) return {};
     if (!this._assetEnvironmentDrafts[assetId]) {
-      const listEntity = this._hass?.states?.["sensor.asset_intelligence_asset_list"];
-      const listAssets = Array.isArray(listEntity?.attributes?.assets)
-        ? listEntity.attributes.assets
-        : [];
-      const listAsset = listAssets.find((item) => String(item?.asset_id || "") === String(assetId));
-
-      const requirements =
-        attrs?.environment_requirements ||
-        listAsset?.environment_requirements ||
-        {};
+      const requirements = this._getLiveAssetEnvironmentRequirements(assetId, attrs);
       this._assetEnvironmentDrafts[assetId] = JSON.parse(JSON.stringify(requirements));
     }
     return this._assetEnvironmentDrafts[assetId];
+  }
+
+  _getLiveAssetEnvironmentRequirements(assetId, attrs) {
+    const fromAttrs = attrs?.environment_requirements;
+    if (fromAttrs && typeof fromAttrs === "object") {
+      return fromAttrs;
+    }
+
+    const listEntity = this._hass?.states?.["sensor.asset_intelligence_asset_list"];
+    const listAssets = Array.isArray(listEntity?.attributes?.assets)
+      ? listEntity.attributes.assets
+      : [];
+    const listAsset = listAssets.find((item) => String(item?.asset_id || "") === String(assetId || ""));
+    const fromList = listAsset?.environment_requirements;
+    if (fromList && typeof fromList === "object") {
+      return fromList;
+    }
+
+    return {};
   }
 
   _clearAssetEnvironmentDraft(assetId) {
@@ -6639,9 +6649,7 @@ _getAssetEnvironmentDraft(assetId, attrs) {
   }
 
   _isAssetEnvironmentDirty(assetId, attrs) {
-    const liveRequirements =
-      attrs?.environment_requirements ||
-      {};
+    const liveRequirements = this._getLiveAssetEnvironmentRequirements(assetId, attrs);
     const draft = this._getAssetEnvironmentDraft(assetId, attrs);
 
     return JSON.stringify(draft) !== JSON.stringify(liveRequirements);
@@ -6710,15 +6718,9 @@ _getAssetEnvironmentDraft(assetId, attrs) {
 
   _renderEnvironmentCategory(title, attrs, categoryKey, metricKeys) {
     const assetId = this._view?.assetId;
-    const listEntity = this._hass?.states?.["sensor.asset_intelligence_asset_list"];
-    const listAssets = Array.isArray(listEntity?.attributes?.assets)
-      ? listEntity.attributes.assets
-      : [];
-    const listAsset = listAssets.find((item) => String(item?.asset_id || "") === String(assetId || ""));
-    const listRequirements = listAsset?.environment_requirements || {};
+    const allRequirements = this._getLiveAssetEnvironmentRequirements(assetId, attrs);
     const liveRequirements =
-      attrs.environment_requirements?.[categoryKey] ||
-      listRequirements?.[categoryKey] ||
+      allRequirements?.[categoryKey] ||
       this._readPath(attrs, `environment_requirements.${categoryKey}`) ||
       {};
     const draftRequirements = assetId
@@ -7607,10 +7609,12 @@ _getAssetTimelineItems(attrs) {
       }
 
       wrap.querySelectorAll(".ai-overflow-item").forEach((item) => {
-        item.onclick = (e) => {
+        if (item.dataset.overflowCloseBound === "true") return;
+        item.addEventListener("click", (e) => {
           e.stopPropagation();
           wrap.classList.remove("open");
-        };
+        });
+        item.dataset.overflowCloseBound = "true";
       });
     });
 
@@ -8021,6 +8025,9 @@ _getAssetTimelineItems(attrs) {
         e.preventDefault();
         e.stopPropagation();
 
+        const overflowWrap = el.closest("[data-asset-overflow]");
+        if (overflowWrap) overflowWrap.classList.remove("open");
+
         const assetId = String(el.getAttribute("data-asset-measure") || "").trim();
         if (!assetId) return;
         if (this._measurementActionInFlight[assetId]) return;
@@ -8033,10 +8040,20 @@ _getAssetTimelineItems(attrs) {
           el.disabled = true;
           await this._callService("asset_intelligence", "start_measurement", { asset_id: assetId });
           await this._load();
+
+          const refreshedAsset = this._getAssetEntities().find((a) => a.attributes?.asset_id === assetId);
+          const refreshedActiveMeasurement = refreshedAsset?.attributes?.active_measurement;
+          const measurementStartedAt = String(refreshedActiveMeasurement?.started_at || "").trim();
+          const measurementIsActive = !!measurementStartedAt && !refreshedActiveMeasurement?.completed;
+          if (!measurementIsActive) {
+            // HA state propagation can lag the service response; do one immediate second refresh.
+            await this._load();
+          }
+
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
 
-          if (onCurrentAsset && !wasDirtyBefore && this._hasUnsavedAssetDetailChanges(assetId)) {
+          if (onCurrentAsset && !wasDirtyBefore) {
             this._discardAssetDetailDrafts(assetId);
             this._refreshAssetInfoSaveState();
           }
@@ -8055,6 +8072,9 @@ _getAssetTimelineItems(attrs) {
         e.preventDefault();
         e.stopPropagation();
 
+        const overflowWrap = el.closest("[data-asset-overflow]");
+        if (overflowWrap) overflowWrap.classList.remove("open");
+
         const assetId = String(el.getAttribute("data-asset-stop-measure") || "").trim();
         if (!assetId) return;
         if (this._measurementActionInFlight[assetId]) return;
@@ -8070,7 +8090,7 @@ _getAssetTimelineItems(attrs) {
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
 
-          if (onCurrentAsset && !wasDirtyBefore && this._hasUnsavedAssetDetailChanges(assetId)) {
+          if (onCurrentAsset && !wasDirtyBefore) {
             this._discardAssetDetailDrafts(assetId);
             this._refreshAssetInfoSaveState();
           }
