@@ -12,344 +12,244 @@ globalThis.__AI_WINDOW_EXPOSURES = WINDOW_EXPOSURES;
 var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
   "photo",
   "receipt",
-    const asset = this._getAssetEntityByAssetId(assetId);
-    if (!asset || !this._hass) return;
+  "invoice",
+  "warranty",
+  "manual",
+  "appraisal",
+  "insurance_policy",
+  "certificate_of_authenticity",
+  "provenance_record",
+  "condition_report",
+  "restoration_record",
+  "loan_agreement",
+  "shipping_document",
+  "installation_instructions",
+  "maintenance_record",
+  "other",
+];
+globalThis.__AI_DOCUMENT_TYPES = DOCUMENT_TYPES;
 
-    const attrs = asset.attributes || {};
-    const modeText = String(mode || "").toLowerCase();
-    if (modeText !== "upload" && modeText !== "attach") return;
+var PHYSICAL_DOCUMENT_LOCATIONS = globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS || [
+  "safe",
+  "safe_deposit_box",
+  "binder",
+  "offsite_archive",
+  "with_agent",
+  "bank",
+  "other",
+];
+globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS = PHYSICAL_DOCUMENT_LOCATIONS;
 
-    const isUpload = modeText === "upload";
-    const title = isUpload ? "Upload document" : "Attach external document";
-    const submitLabel = isUpload ? "Upload" : "Attach";
-    const defaultType = "insurance_policy";
-    const generatedDocumentId = this._createClientDocumentId();
+// Max safe size for base64-encoded websocket uploads (4MB limit / 1.33 base64 expansion = ~3MB)
+var MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES || (3 * 1024 * 1024);
+globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
 
-    const uploadFields = `
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-type">Document type</label>
-        <select id="ai-doc-type" class="ai-dialog-select" name="type" required>
-          ${DOCUMENT_TYPES.map((docType) => `
-            <option value="${this._escapeHtml(docType)}" ${docType === defaultType ? "selected" : ""}>
-              ${this._escapeHtml(this._titleCase(docType.replaceAll("_", " ")))}
-            </option>
-          `).join("")}
-        </select>
-      </div>
+var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelligenceApp extends HTMLElement {
+  constructor() {
+    super();
+    this._view = { type: "home" };
+    this._hass = null;
+    this._areas = [];
+    this._floors = [];
+    this._loaded = false;
+    this._loadError = null;
+    this._entityRegistry = [];
+    this._roomConfig = {};
+    this._systemDefaults = {};
+    this._editingMetric = null;
+    this._editingWindowIndex = null;
+    this.deviceRegistry = [];
+    this._draftMetrics = {};
+    this._draftWindows = {};
+    this._showAllSensorsByMetric = {};
+    this._labelRegistry = [];
+    // Γ£à Temporary unsaved values for Asset Detail form fields
+    this._assetInfoDrafts = {};
+    // Γ£à Temporary unsaved values for Asset Detail environment limits
+    this._assetEnvironmentDrafts = {};
+    this._assetHistoryFilter = "all";
+    this._assetHistoryCache = {};
+    this._assetHistoryLoading = {};
+    this._roomHistoryFilterByRoom = {};
+    this._roomHistoryAssetFilterByRoom = {};
+    this._measurementTicker = null;
+    this._assetDetailInteractionActive = false;
+    this._assetDetailInteractionTimer = null;
+    this._roomConfigInteractionActive = false;
+    this._roomConfigInteractionTimer = null;
+    // Γ£à Cache for authenticated protected image blob URLs
+    this._protectedImageBlobCache = {};
+    this._subscribedConnection = null;
+    this._renderDebounceTimer = null;
+    this._renderQueued = false;
 
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-document-file">Document file</label>
-        <input id="ai-doc-document-file" class="ai-dialog-input" name="document_file" type="file" required />
-        <div style="font-size:12px; color:var(--secondary-text-color);">
-          Choose the file directly from your browser instead of entering a Home Assistant path.
-          <br/><strong>Maximum file size: 3 MB</strong>
-        </div>
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-filename">Filename override (optional)</label>
-        <input id="ai-doc-filename" class="ai-dialog-input" name="filename" type="text" placeholder="policy_2026.pdf" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-title">Title</label>
-        <input id="ai-doc-title" class="ai-dialog-input" name="title" type="text" placeholder="Insurance Policy 2026" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-date">Document date</label>
-        <input id="ai-doc-date" class="ai-dialog-input" name="date" type="date" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-tags">Tags (comma separated)</label>
-        <input id="ai-doc-tags" class="ai-dialog-input" name="tags" type="text" placeholder="insurance, policy" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-notes">Notes</label>
-        <textarea id="ai-doc-notes" class="ai-dialog-input" style="min-height:84px; resize:vertical;" name="notes"></textarea>
-      </div>
-    `;
-
-    const attachFields = `
-      <input type="hidden" name="document_id" value="${this._escapeHtml(generatedDocumentId)}" />
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-type">Document type</label>
-        <select id="ai-doc-type" class="ai-dialog-select" name="type" required>
-          ${DOCUMENT_TYPES.map((docType) => `
-            <option value="${this._escapeHtml(docType)}" ${docType === defaultType ? "selected" : ""}>
-              ${this._escapeHtml(this._titleCase(docType.replaceAll("_", " ")))}
-            </option>
-          `).join("")}
-        </select>
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-title">Title</label>
-        <input id="ai-doc-title" class="ai-dialog-input" name="title" type="text" placeholder="Insurance Policy 2026" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-provider-document-id">Document URL / Reference</label>
-        <input id="ai-doc-provider-document-id" class="ai-dialog-input" name="provider_document_id" type="text" placeholder="https://vault.example.com/policies/policy_2026.pdf" required />
-        <div style="font-size:12px; color:var(--secondary-text-color);">Link to the document location (URL, path, or reference ID)</div>
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-location">External location reference</label>
-        <input id="ai-doc-location" class="ai-dialog-input" name="location" type="text" placeholder="Bank archive reference" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-date">Document date</label>
-        <input id="ai-doc-date" class="ai-dialog-input" name="date" type="date" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-tags">Tags (comma separated)</label>
-        <input id="ai-doc-tags" class="ai-dialog-input" name="tags" type="text" placeholder="insurance, policy" />
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-notes">Notes</label>
-        <textarea id="ai-doc-notes" class="ai-dialog-input" style="min-height:84px; resize:vertical;" name="notes"></textarea>
-      </div>
-    `;
-
-    const physicalFields = `
-      <div style="border-top:1px solid var(--divider-color); margin-top:4px; padding-top:12px;"></div>
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-physical-location">Physical original location (optional)</label>
-        <select id="ai-doc-physical-location" class="ai-dialog-select" name="physical_location">
-          <option value="">No physical location to record</option>
-          ${PHYSICAL_DOCUMENT_LOCATIONS.map((locationValue) => `
-            <option value="${this._escapeHtml(locationValue)}">
-              ${this._escapeHtml(this._titleCase(locationValue.replaceAll("_", " ")))}
-            </option>
-          `).join("")}
-        </select>
-      </div>
-
-      <div class="ai-dialog-field">
-        <label class="ai-dialog-field-label" for="ai-doc-physical-notes">Physical location notes</label>
-        <input id="ai-doc-physical-notes" class="ai-dialog-input" name="physical_notes" type="text" placeholder="Safe in closet / Bank box #12" />
-      </div>
-    `;
-
-    const dialog = document.createElement("ha-dialog");
-    dialog.open = true;
-    dialog.setAttribute("header-title", title);
-    dialog.setAttribute("type", "alert");
-    dialog.scrimClickAction = true;
-    dialog.escapeKeyAction = true;
-
-    dialog.innerHTML = `
-      <style>
-        .ai-dialog-shell { min-width: 560px; max-width: 700px; }
-        .ai-dialog-body { display:flex; flex-direction:column; gap:12px; padding:16px 24px; max-height:68vh; overflow:auto; }
-        .ai-dialog-field { display:flex; flex-direction:column; gap:6px; }
-        .ai-dialog-field-label { font-size:12px; font-weight:600; color:var(--secondary-text-color); letter-spacing:0.02em; }
-        .ai-dialog-input { width:100%; min-height:44px; box-sizing:border-box; padding:10px 12px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; outline:none; }
-        .ai-dialog-select { width:100%; min-height:44px; box-sizing:border-box; padding:0 12px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; outline:none; appearance:auto; }
-        .ai-dialog-actions { display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:10px 24px 20px; }
-      </style>
-
-      <div class="ai-dialog-shell">
-        <form class="ai-dialog-body" data-document-workflow-form>
-          ${isUpload ? uploadFields : attachFields}
-          ${physicalFields}
-        </form>
-        <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-document-workflow-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(dialog);
-
-    let settled = false;
-    const closeDialog = () => {
-      if (settled) return;
-      settled = true;
-      try { dialog.open = false; } catch (e) {}
-      dialog.remove();
-    };
-
-    const form = dialog.querySelector("[data-document-workflow-form]");
-    const submitBtn = dialog.querySelector("[data-document-workflow-submit]");
-    const cancelBtn = dialog.querySelector("[data-document-workflow-cancel]");
-
-    const readValue = (name) => {
-      const field = form?.querySelector(`[name="${name}"]`);
-      return String(field?.value || "").trim();
-    };
-
-    cancelBtn?.addEventListener("click", closeDialog);
-
-    if (isUpload) {
-      const fileInput = form?.querySelector('[name="document_file"]');
-      const maxSizeBytes = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
-      const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
-
-      let fileSizeWarning = document.createElement("div");
-      fileSizeWarning.id = "ai-file-size-warning";
-      fileSizeWarning.style.cssText = "display:none; padding:8px 10px; margin-top:4px; background:#fff3cd; border:1px solid #ffc107; border-radius:4px; color:#856404; font-size:13px;";
-      fileInput?.parentElement?.appendChild(fileSizeWarning);
-
-      fileInput?.addEventListener("change", (e) => {
-        if (e.target.files && e.target.files[0]) {
-          const fileSize = e.target.files[0].size;
-          if (fileSize > maxSizeBytes) {
-            fileSizeWarning.textContent = `Warning: File size (${(fileSize / (1024 * 1024)).toFixed(1)} MB) exceeds maximum of ${maxSizeMB} MB. Please select a smaller file.`;
-            fileSizeWarning.style.display = "block";
-            submitBtn.disabled = true;
-          } else {
-            fileSizeWarning.style.display = "none";
-            submitBtn.disabled = false;
-          }
-        }
-      });
-    }
-
-    submitBtn?.addEventListener("click", async () => {
-      const type = readValue("type");
-      if (!type) {
-        alert("Document type is required.");
-        return;
-      }
-
-      const physicalLocation = readValue("physical_location");
-      const physicalNotes = readValue("physical_notes");
-
-      submitBtn.disabled = true;
-      try {
-        if (isUpload) {
-          const selectedDocument = await this._readFileInputAsBase64(form, "document_file", {
-            required: true,
-            maxBytes: MAX_BROWSER_DOCUMENT_UPLOAD_BYTES,
-          });
-
-          const uploadPayload = {
-            asset_id: assetId,
-            type,
-            content_base64: selectedDocument.contentBase64,
-            uploaded_filename: selectedDocument.filename,
-          };
-
-          const filename = readValue("filename");
-          const titleValue = readValue("title");
-          const dateValue = readValue("date");
-          const notesValue = readValue("notes");
-          const tags = this._normalizeCsvToList(readValue("tags"));
-
-          if (selectedDocument.mimeType) uploadPayload.mime_type = selectedDocument.mimeType;
-          if (selectedDocument.sizeBytes > 0) uploadPayload.size_bytes = selectedDocument.sizeBytes;
-          if (filename) uploadPayload.filename = filename;
-          if (titleValue) uploadPayload.title = titleValue;
-          if (dateValue) uploadPayload.date = dateValue;
-          if (notesValue) uploadPayload.notes = notesValue;
-          if (tags.length) uploadPayload.tags = tags;
-
-          const canUseHttpApi = typeof this._hass?.callApi === "function";
-          if (!canUseHttpApi && selectedDocument.sizeBytes > 750 * 1024) {
-            throw new Error("File is too large for this connection mode. Please use a smaller file or configure path-based upload.");
-          }
-
-          await this._callService("asset_intelligence", "upload_document", uploadPayload);
-          await this._load();
-
-          if (physicalLocation) {
-            const refreshedAsset = this._getAssetEntityByAssetId(assetId);
-            const refreshedDocs = Array.isArray(refreshedAsset?.attributes?.documents)
-              ? refreshedAsset.attributes.documents
-              : [];
-
-            const docByLastId = refreshedDocs.find((doc) => String(doc?.document_id || "") === String(refreshedAsset?.attributes?.last_document_id || ""));
-            const fallbackDoc = refreshedDocs.length ? refreshedDocs[refreshedDocs.length - 1] : null;
-            const targetDoc = docByLastId || fallbackDoc;
-
-            await this._callService("asset_intelligence", "add_physical_document_location", {
-              asset_id: assetId,
-              type,
-              location: physicalLocation,
-              notes: physicalNotes || "",
-              document_id: targetDoc?.document_id || null,
-              provider_document_id: targetDoc?.provider_document_id || null,
-              title: targetDoc?.title || titleValue || null,
-            });
-            await this._load();
-          }
-        } else {
-          const providerDocumentId = readValue("provider_document_id");
-          if (!providerDocumentId) {
-            throw new Error("Provider document ID is required for external attach.");
-          }
-
-          const attachPayload = {
-            asset_id: assetId,
-            document_id: readValue("document_id") || generatedDocumentId,
-            type,
-            provider_document_id: providerDocumentId,
-          };
-
-          const optionalTextFields = [
-            "title",
-            "location",
-            "date",
-            "notes",
-          ];
-
-          optionalTextFields.forEach((fieldName) => {
-            const value = readValue(fieldName);
-            if (value) attachPayload[fieldName] = value;
-          });
-
-          const sizeBytesValue = readValue("size_bytes");
-          if (sizeBytesValue) {
-            const numericSize = Number(sizeBytesValue);
-            if (!Number.isNaN(numericSize) && numericSize >= 0) {
-              attachPayload.size_bytes = numericSize;
+    // MutationObserver to catch HA picker/selector elements that upgrade later
+    this._ai_mutation_observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of Array.from(m.addedNodes)) {
+          if (!(node instanceof HTMLElement)) continue;
+          const tag = (node.tagName || "").toLowerCase();
+          if (["ha-area-picker","ha-labels-picker","ha-selector","ha-icon-picker","ha-entity-picker"].includes(tag)) {
+            try {
+              if (this._hass) node.hass = this._hass;
+            } catch (e) {}
+            if (tag === "ha-selector" && (node.selector === undefined || node.selector === null)) {
+              try { node.selector = {}; } catch (e) {}
+            }
+            if (tag === "ha-labels-picker" && (node.value === undefined || node.value === null)) {
+              try { node.value = []; } catch (e) {}
+            }
+            if ((tag === "ha-area-picker" || tag === "ha-entity-picker") && (node.value === undefined || node.value === null)) {
+              try { node.value = ""; } catch (e) {}
+            }
+            if (typeof node.requestUpdate === "function") {
+              try { node.requestUpdate(); } catch (e) {}
             }
           }
-
-          const tags = this._normalizeCsvToList(readValue("tags"));
-          if (tags.length) attachPayload.tags = tags;
-
-          await this._callService("asset_intelligence", "attach_document", attachPayload);
-
-          if (physicalLocation) {
-            await this._callService("asset_intelligence", "add_physical_document_location", {
-              asset_id: assetId,
-              type,
-              location: physicalLocation,
-              notes: physicalNotes || "",
-              document_id: attachPayload.document_id,
-              provider_document_id: attachPayload.provider_document_id,
-              title: attachPayload.title || null,
-            });
-          }
-
-          await this._load();
-        }
-
-        closeDialog();
-      } catch (err) {
-        console.error("Document workflow failed", err);
-        const detailedMessage = this._extractErrorMessage(err);
-        alert(detailedMessage || "Document workflow failed. Verify fields and try again.");
-      } finally {
-        if (!settled) {
-          submitBtn.disabled = false;
         }
       }
     });
+    this._docStorageEventUnsub = null;
+    this._labelRegistryEventUnsub = null;
+    this._documentStorageAvailable = null; // null = unknown, true/false = explicit
+    this._boundShowDialogHandler = this._handleShowDialogEvent.bind(this);
+    this._boundBeforeUnloadHandler = this._handleBeforeUnload.bind(this);
+  }
 
-    dialog.addEventListener("closed", closeDialog);
+  connectedCallback() {
+    if (super.connectedCallback) super.connectedCallback();
+    document.addEventListener("show-dialog", this._boundShowDialogHandler);
+    window.addEventListener("beforeunload", this._boundBeforeUnloadHandler);
+    this._bindRoomConfigDelegation();
+  }
 
-    // ✅ If the user is editing Asset Detail and has unsaved draft values,
+  _bindRoomConfigDelegation() {
+    // Single delegated handler on the component root ΓÇö survives innerHTML replacement.
+    // Handles all room-config action buttons (edit, save, cancel, remove metric).
+    if (this._roomConfigDelegationBound) return;
+    this._roomConfigDelegationBound = true;
+
+    // Set interaction guard on pointerdown so a pending hass update
+    // can't replace the DOM between pointerdown and click.
+    this.addEventListener("pointerdown", (e) => {
+      if (this._view?.type !== "room-config") return;
+      const btn = e.target?.closest(
+        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric]"
+      );
+      if (!btn) return;
+      this._roomConfigInteractionActive = true;
+      if (this._roomConfigInteractionTimer) clearTimeout(this._roomConfigInteractionTimer);
+      this._roomConfigInteractionTimer = setTimeout(() => {
+        this._roomConfigInteractionActive = false;
+        this._roomConfigInteractionTimer = null;
+      }, 800);
+    }, true);
+
+    this.addEventListener("click", (e) => {
+      if (this._view?.type !== "room-config") return;
+
+      const editBtn = e.target?.closest("[data-edit-metric]");
+      if (editBtn) {
+        e.stopPropagation();
+        const fieldPath = editBtn.getAttribute("data-edit-metric");
+        if (!fieldPath) return;
+        this._roomConfigInteractionActive = false;
+        this._editingMetric = fieldPath;
+        this._render();
+        requestAnimationFrame(() => {
+          Promise.resolve().then(() => {
+            const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
+            if (!picker) return;
+            try { picker.hass = this._hass; } catch (_) {}
+            try {
+              const roomId = this._view?.roomId;
+              if (roomId) picker.entityFilter = this._createMetricEntityFilter(roomId, fieldPath);
+            } catch (_) {}
+            try { if (typeof picker.requestUpdate === "function") picker.requestUpdate(); } catch (_) {}
+          });
+        });
+        return;
+      }
+
+      const cancelBtn = e.target?.closest("[data-cancel-metric]");
+      if (cancelBtn) {
+        e.stopPropagation();
+        const fieldPath = cancelBtn.getAttribute("data-cancel-metric");
+        if (fieldPath && this._draftMetrics[fieldPath]) delete this._draftMetrics[fieldPath];
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const removeBtn = e.target?.closest("[data-remove-metric]");
+      if (removeBtn) {
+        e.stopPropagation();
+        const fieldPath = removeBtn.getAttribute("data-remove-metric");
+        if (fieldPath) this._draftMetrics[fieldPath] = { entity: "" };
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const saveBtn = e.target?.closest("[data-save-metric]");
+      if (saveBtn) {
+        e.stopPropagation();
+        const fieldPath = saveBtn.getAttribute("data-save-metric");
+        if (!fieldPath) return;
+        const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
+        const selected =
+          this._draftMetrics[fieldPath]?.entity ??
+          picker?.value ??
+          picker?.entityId ??
+          picker?.selected ??
+          "";
+        if (!this._draftMetrics[fieldPath]) this._draftMetrics[fieldPath] = {};
+        this._draftMetrics[fieldPath].entity = selected;
+        this._editingMetric = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+    }, true);
+  }
+
+  disconnectedCallback() {
+    try { this._ai_mutation_observer?.disconnect(); } catch (e) {}
+    if (super.disconnectedCallback) super.disconnectedCallback();
+    try { if (this._docStorageEventUnsub) this._docStorageEventUnsub(); } catch (e) {}
+    this._docStorageEventUnsub = null;
+    try { if (this._labelRegistryEventUnsub) this._labelRegistryEventUnsub(); } catch (e) {}
+    this._labelRegistryEventUnsub = null;
+    this._subscribedConnection = null;
+    try {
+      if (this._renderDebounceTimer) {
+        clearTimeout(this._renderDebounceTimer);
+        this._renderDebounceTimer = null;
+      }
+    } catch (e) {}
+    try {
+      if (this._measurementTicker) {
+        clearInterval(this._measurementTicker);
+        this._measurementTicker = null;
+      }
+    } catch (e) {}
+    try { document.removeEventListener("show-dialog", this._boundShowDialogHandler); } catch (e) {}
+    try { window.removeEventListener("beforeunload", this._boundBeforeUnloadHandler); } catch (e) {}
+    // Clean up blob URLs
+    try {
+      Object.values(this._protectedImageBlobCache || {}).forEach((blobUrl) => {
+        try { URL.revokeObjectURL(blobUrl); } catch (e) {}
+      });
+      this._protectedImageBlobCache = {};
+    } catch (e) {}
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+
+    // Γ£à If the user is editing Asset Detail and has unsaved draft values,
     // do NOT repaint the screen from live backend updates.
     const currentAssetId = this._view?.type === "asset-detail"
       ? this._view?.assetId
@@ -1145,7 +1045,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       });
 
       // --------------------------------------------------
-      // ✅ TEMPORARY: Load persisted Room Configuration
+      // âœ… TEMPORARY: Load persisted Room Configuration
       // (matches storage.py system-of-record)
       // --------------------------------------------------
       try {
@@ -1192,7 +1092,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
   _render() {
     if (!this._hass) return;
 
-    // ✅ If the user is editing Asset null;  // ✅ If the user is editing Asset Detail and has unsaved draft values,
+    // âœ… If the user is editing Asset null;  // âœ… If the user is editing Asset Detail and has unsaved draft values,
 
     const currentAssetId =
         this._view?.type === "asset-detail"
@@ -3262,7 +3162,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       ${
         isInitializing
           ? `<div class="ai-info" style="background: #e3f2fd; border-left: 4px solid #1976d2; padding: 12px 16px; margin: 12px 0; border-radius: 4px;">
-              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">⏳ Initializing Environment Monitor</div>
+              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">â³ Initializing Environment Monitor</div>
               <div style="font-size: 13px; color: #0d47a1;">The system is currently loading room environment data from your sensors. Data will appear once the coordinator completes its first refresh cycle (typically within 1-2 minutes).</div>
             </div>`
           : ``
@@ -3275,7 +3175,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                 <div class="ai-floor">
                   <div class="ai-floor-title">
                     <button class="ai-floor-button" data-floor="${this._escapeHtml(floor)}">
-                      🏠 ${this._escapeHtml(floor)}
+                      ðŸ  ${this._escapeHtml(floor)}
                     </button>
                   </div>
 
@@ -3305,7 +3205,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
     return `
       <div class="ai-title-row">
-        <button class="ai-back-button" data-nav="home">← Back</button>
+        <button class="ai-back-button" data-nav="home">â† Back</button>
         <div class="ai-title">${this._escapeHtml(floorName)}</div>
       </div>
       <div class="ai-subtitle">${floorAssets.length} asset${floorAssets.length === 1 ? "" : "s"} on this floor</div>
@@ -3400,10 +3300,10 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     });
     const missingSignalLabels = configuredEntries
       .filter(([, meta]) => !meta.has_data)
-      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " â€¢ ")));
     const reportingSignalLabels = configuredEntries
       .filter(([, meta]) => !!meta.has_data)
-      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " • ")));
+      .map(([key]) => this._titleCase(String(key).replaceAll("_", " ").replaceAll(".", " â€¢ ")));
     const roomConfidenceSummary = (() => {
       const normalized = String(attrs.confidence || "").toUpperCase();
       if (normalized === "GOOD") {
@@ -3479,7 +3379,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       ${
         isInitializing
           ? `<div class="ai-info" style="background: #e3f2fd; border-left: 4px solid #1976d2; padding: 12px 16px; margin: 12px 0; border-radius: 4px;">
-              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">⏳ Loading Room Environment Data</div>
+              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">â³ Loading Room Environment Data</div>
               <div style="font-size: 13px; color: #0d47a1;">Sensor readings are being collected from your devices. Data will appear here once the environment monitor completes its first update cycle.</div>
             </div>`
           : ``
@@ -3489,7 +3389,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
         <div class="ai-header-body">
           <div class="ai-header-top">
             <div class="ai-header-title">${this._escapeHtml(roomName)}</div>
-            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration">⚙️</button>
+            <button class="ai-gear-button" data-room-config="${this._escapeHtml(roomId)}" title="Room configuration">âš™ï¸</button>
           </div>
 
           <div class="ai-header-grid">
@@ -3556,7 +3456,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                       .map((w, idx) => `
                         <div class="ai-group-row">
                           <span class="ai-muted">Window ${idx + 1}</span>
-                          <span>${this._escapeHtml(w.direction || "—")}</span>
+                          <span>${this._escapeHtml(w.direction || "â€”")}</span>
                         </div>
                       `).join("")
               }
@@ -3629,12 +3529,12 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                 </div>
 
                 <div class="ai-group-card" style="margin-bottom:12px;">
-                  <div class="ai-group-title">Signals currently missing — <button class="ai-link-btn" style="font-size:12px;" data-room-config="${this._escapeHtml(roomId)}">Configure sensors</button></div>
+                  <div class="ai-group-title">Signals currently missing â€” <button class="ai-link-btn" style="font-size:12px;" data-room-config="${this._escapeHtml(roomId)}">Configure sensors</button></div>
                   ${missingSignalLabels.length
                     ? missingSignalLabels.slice(0, 5).map((label) => `
                         <div class="ai-group-row"><span class="ai-muted">Missing</span><span>${this._escapeHtml(label)}</span></div>
                       `).join("")
-                    : `<div class="ai-group-row"><span class="ai-muted">Missing</span><span>None — all configured signals are reporting</span></div>`
+                    : `<div class="ai-group-row"><span class="ai-muted">Missing</span><span>None â€” all configured signals are reporting</span></div>`
                   }
                 </div>
 
@@ -3876,7 +3776,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
           source: "audit",
           title,
           meta: this._formatLocalDateTime(timestampValue),
-          copy: copyParts.join(" • "),
+          copy: copyParts.join(" â€¢ "),
           details: {
             event_type: isStopMeasurement ? "stop" : "start",
             room_id: normalizedRoomId,
@@ -3907,7 +3807,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       : 0;
     const lastSessionAt = lastSessionTs > 0
       ? this._formatLocalDateTime(new Date(lastSessionTs).toISOString())
-      : "—";
+      : "â€”";
 
     const observationValues = completedSessions
       .map((entry) => Number(entry?.details?.observation_count ?? NaN))
@@ -3920,7 +3820,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       roomAssetCount: Number.isFinite(Number(roomAssetCount)) ? Number(roomAssetCount) : 0,
       sessionCount,
       lastSessionAt,
-      avgObservationsText: avgObservations === null ? "—" : String(Math.round(avgObservations * 10) / 10),
+      avgObservationsText: avgObservations === null ? "â€”" : String(Math.round(avgObservations * 10) / 10),
     };
   }
 
@@ -3971,7 +3871,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     const labels = this._normalizeLabelList(deviceMeta.labels);
 
     // --------------------------------------------------
-    // ✅ Restore draft values into normal input/select/textarea fields
+    // âœ… Restore draft values into normal input/select/textarea fields
     // --------------------------------------------------
     const watchedFields = this.querySelectorAll("[data-asset-info-watch][data-asset-field]");
     console.log("WATCHED FIELDS FOUND:", watchedFields.length);
@@ -3994,7 +3894,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
         this._assetInfoDrafts[assetId][fieldName] = e.target.value;
 
-        // ✅ DEBUG: prove draft is capturing
+        // âœ… DEBUG: prove draft is capturing
         console.log("DRAFT UPDATE:", assetId, fieldName, e.target.value);
 
         this._refreshAssetInfoSaveState();
@@ -4007,7 +3907,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     });
 
     // --------------------------------------------------
-    // ✅ Room picker
+    // âœ… Room picker
     // --------------------------------------------------
     const areaPicker = this.querySelector("[data-asset-area]");
     if (areaPicker) {
@@ -4030,7 +3930,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     }
 
     // --------------------------------------------------
-    // ✅ Labels picker
+    // âœ… Labels picker
     // --------------------------------------------------
     const labelsPicker = this.querySelector("[data-asset-labels]");
     if (labelsPicker) {
@@ -4055,7 +3955,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     }
 
     // --------------------------------------------------
-    // ✅ Action button state
+    // âœ… Action button state
     // --------------------------------------------------
     this._refreshAssetInfoSaveState();
   }
@@ -4720,7 +4620,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                         isEditing
                           ? `
                             <select class="ai-config-dropdown" data-window-direction="${i}">
-                              <option value="">Select direction…</option>
+                              <option value="">Select directionâ€¦</option>
                               ${WINDOW_DIRECTIONS.map(dir => `
                                 <option value="${dir}" ${dir === w.direction ? "selected" : ""}>
                                   ${this._escapeHtml(this._titleCase(dir))}
@@ -4729,7 +4629,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                             </select>
 
                             <select class="ai-config-dropdown" data-window-exposure="${i}">
-                              <option value="">Select exposure…</option>
+                              <option value="">Select exposureâ€¦</option>
                               ${WINDOW_EXPOSURES.map(exp => `
                                 <option value="${exp}" ${exp === w.exposure ? "selected" : ""}>
                                   ${this._escapeHtml(this._titleCase(exp))}
@@ -4739,10 +4639,10 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                           `
                           : `
                             <span class="ai-tag">
-                              ${this._escapeHtml(this._titleCase(w.direction || "—"))}
+                              ${this._escapeHtml(this._titleCase(w.direction || "â€”"))}
                             </span>
                             <span class="ai-tag">
-                              ${this._escapeHtml(this._titleCase(w.exposure || "—"))}
+                              ${this._escapeHtml(this._titleCase(w.exposure || "â€”"))}
                             </span>
                           `
                       }
@@ -4874,7 +4774,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
             <span>
               Assets: <strong>${assetCount}</strong>
               ${atRiskCount > 0 ? `
-                <span class="ai-separator">•</span>
+                <span class="ai-separator">â€¢</span>
                 <span class="ai-risk-badge">${atRiskCount} at risk</span>
               ` : ""}
 
@@ -4894,7 +4794,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
               <div class="ai-data-label">Light</div>
               <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
             </div>
-            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
+            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NOâ‚‚">
               <div class="ai-data-label">Air Quality</div>
               <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
             </div>
@@ -4918,7 +4818,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
               <div class="ai-data-label">Context</div>
               <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
             </div>
-            <div class="ai-room-metric-item" title="CO₂">
+            <div class="ai-room-metric-item" title="COâ‚‚">
               <div class="ai-data-label">Control Context</div>
               <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
             </div>
@@ -4956,7 +4856,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     const roomAreaId = this._resolveAssetRoomAreaId(attrs, assetEntity.entity_id);
     const roomArea = roomAreaId ? areaMap[roomAreaId] : null;
     const roomName = roomArea?.name || (roomAreaId ? this._titleCase(String(roomAreaId).replaceAll("_", " ")) : "No Room");
-    const assetType = attrs.asset_type || attrs.type || "—";
+    const assetType = attrs.asset_type || attrs.type || "â€”";
     const documentCount = attrs.document_count ?? 0;
     const updatedText = this._formatLocalDateTime(
       attrs.room_last_updated || attrs.updated_at || assetEntity.last_updated
@@ -5023,20 +4923,20 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     const icon = this._getAssetIcon(attrs.asset_type, deviceMeta.labels);
 
 
-    const assetTypeRaw = attrs.asset_type || attrs.type || "—";
-    const assetType = assetTypeRaw && assetTypeRaw !== "—"
+    const assetTypeRaw = attrs.asset_type || attrs.type || "â€”";
+    const assetType = assetTypeRaw && assetTypeRaw !== "â€”"
       ? this._titleCase(String(assetTypeRaw).replaceAll("_", " "))
-      : "—";
+      : "â€”";
 
     const labelSummary = this._summarizeLabels(deviceMeta.labels, assetTypeRaw);
 
     const locationDetail =
-      attrs.location_detail || "—";
+      attrs.location_detail || "â€”";
 
     const insuranceDescription =
       attrs.descriptions?.insurance ||
       attrs.insurance_description ||
-      "—";
+      "â€”";
 
     const atRiskValue = String(
       attrs.environment_risk_state ||
@@ -5046,19 +4946,19 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     ).toUpperCase();
 
     const rawReasons =
-      // ✅ 1. New structured event reasons (BEST SOURCE)
+      // âœ… 1. New structured event reasons (BEST SOURCE)
       Array.isArray(attrs.last_environment_event?.reasons)
         ? attrs.last_environment_event.reasons
 
-      // ✅ 2. Direct array field
+      // âœ… 2. Direct array field
       : Array.isArray(attrs.environment_reasons)
         ? attrs.environment_reasons
 
-      // ✅ 3. String field (convert to array)
+      // âœ… 3. String field (convert to array)
       : typeof attrs.environment_reasons === "string" && attrs.environment_reasons.trim()
         ? [attrs.environment_reasons.trim()]
 
-      // ✅ 4. Generic fallback fields
+      // âœ… 4. Generic fallback fields
       : Array.isArray(attrs.reasons)
         ? attrs.reasons
 
@@ -5083,7 +4983,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
     let riskReasonTooltip =
       rawReasons.length > 0
-        ? rawReasons.join(" • ")
+        ? rawReasons.join(" â€¢ ")
         : (atRiskValue === "UNCONFIGURED"
             ? "No environmental limits configured"
             : "No active environmental risk");
@@ -5098,7 +4998,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
     const environmentStateSinceText = environmentStateSinceRaw
       ? this._formatLocalDateTime(environmentStateSinceRaw)
-      : "—";
+      : "â€”";
 
     const atRiskColor = this._stateColor(atRiskValue);
 
@@ -5416,14 +5316,14 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
       attrs.holder ||
       custody.owner ||
       custody.holder ||
-      "—";
+      "â€”";
 
     const custodyLocationDetail =
       custody.location_detail ||
       custody.location ||
       attrs.location_detail ||
       this._readPath(attrs, "placement.location_detail") ||
-      "—";
+      "â€”";
 
     const custodyEffectiveAt = this._formatLocalDateTime(
       custody.effective_at || attrs.updated_at || asset.last_updated
@@ -5734,7 +5634,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
                 data-asset-overflow="${this._escapeHtml(assetId)}"
               >
                 <button class="ai-overflow-button" type="button" title="More actions">
-                  ⋮
+                  â‹®
                 </button>
                 <div class="ai-overflow-menu">
                   ${measurementIsActive
@@ -5775,7 +5675,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
           <div class="ai-asset-status-strip">
             <div
               class="ai-asset-status-cell ai-risk-cell ai-risk-${riskState.toLowerCase()}"
-              title="${this._escapeHtml(environmentReasons.length ? environmentReasons.join(' • ') : '')}"
+              title="${this._escapeHtml(environmentReasons.length ? environmentReasons.join(' â€¢ ') : '')}"
             >
               <div class="ai-asset-status-label">Risk</div>
               <div class="ai-asset-status-value">
@@ -6303,7 +6203,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
                     <div class="ai-readout-row">
                       <div class="ai-readout-label">Event count</div>
-                      <div class="ai-readout-value">${this._escapeHtml(String(attrs.environment_event_count ?? "—"))}</div>
+                      <div class="ai-readout-value">${this._escapeHtml(String(attrs.environment_event_count ?? "â€”"))}</div>
                     </div>
                   </div>
                 </div>
@@ -6503,12 +6403,12 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
               ? documents.map((doc, index) => {
                   const physical = this._resolvePhysicalDocumentLocation(doc, physicalLocations);
                   const title = doc?.title || doc?.filename || doc?.name || `Document ${index + 1}`;
-                  const type = this._titleCase(String(doc?.type || "—").replaceAll("_", " "));
-                  const date = doc?.date || doc?.created_at || "—";
+                  const type = this._titleCase(String(doc?.type || "â€”").replaceAll("_", " "));
+                  const date = doc?.date || doc?.created_at || "â€”";
                   const physicalLocationText = physical?.location
                     ? this._titleCase(String(physical.location).replaceAll("_", " "))
-                    : "—";
-                  const physicalNotesText = physical?.notes || "—";
+                    : "â€”";
+                  const physicalNotesText = physical?.notes || "â€”";
 
                   return `
                     <div class="ai-doc-card">
@@ -6808,14 +6708,14 @@ _getAssetEnvironmentDraft(assetId, attrs) {
 
       const unitLabel = (() => {
         const formatted = this._formatEnvironmentMetricValue(categoryKey, metricKey, 1);
-        if (!formatted || formatted === "—") return "";
+        if (!formatted || formatted === "â€”") return "";
         const raw = String(formatted);
 
-        if (raw.endsWith(" °F")) return "°F";
+        if (raw.endsWith(" Â°F")) return "Â°F";
         if (raw.endsWith(" %")) return "%";
         if (raw.endsWith(" lx")) return "lx";
         if (raw.endsWith(" ppb")) return "ppb";
-        if (raw.endsWith(" µg/m³")) return "µg/m³";
+        if (raw.endsWith(" Âµg/mÂ³")) return "Âµg/mÂ³";
         if (raw.endsWith(" hPa")) return "hPa";
         if (raw.endsWith(" mm/s")) return "mm/s";
         if (raw.endsWith(" dB")) return "dB";
@@ -7144,7 +7044,7 @@ _getAssetTimelineItems(attrs) {
         const raw = String(evt?.action || evt?.message || "").trim();
         if (!raw) return;
 
-        const structuredEntryPattern = /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\s+—\s+/;
+        const structuredEntryPattern = /^\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2}\s+â€”\s+/;
         if (!structuredEntryPattern.test(raw)) {
           pushAuditEntry(
             timestampValue,
@@ -7176,7 +7076,7 @@ _getAssetTimelineItems(attrs) {
           const cleaned = entry.trim().replace(/^,+|,+$/g, "");
 
           const match = cleaned.match(
-            /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+—\s+(.*?)\s+→\s+(.*)$/
+            /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+â€”\s+(.*?)\s+â†’\s+(.*)$/
           );
 
           if (match) {
@@ -7207,7 +7107,7 @@ _getAssetTimelineItems(attrs) {
         const cleaned = entry.trim().replace(/^,+|,+$/g, "");
 
         const match = cleaned.match(
-          /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+—\s+(.*?)\s+→\s+(.*)$/
+          /^(\d{4}-\d{2}-\d{2}[\sT]\d{2}:\d{2})\s+â€”\s+(.*?)\s+â†’\s+(.*)$/
         );
 
         if (match) {
@@ -7357,7 +7257,7 @@ _getAssetTimelineItems(attrs) {
     return "amber";
   }
 
-  _renderStructuredReadoutValue(value, emptyText = "—") {
+  _renderStructuredReadoutValue(value, emptyText = "â€”") {
     if (value === null || value === undefined || value === "") {
       return `<span class="ai-readout-muted">${this._escapeHtml(emptyText)}</span>`;
     }
@@ -7394,7 +7294,7 @@ _getAssetTimelineItems(attrs) {
             } else if (rawVal && typeof rawVal === "object") {
               displayVal = JSON.stringify(rawVal);
             } else if (rawVal === null || rawVal === undefined || rawVal === "") {
-              displayVal = "—";
+              displayVal = "â€”";
             } else {
               displayVal = String(rawVal);
             }
@@ -7493,8 +7393,8 @@ _getAssetTimelineItems(attrs) {
     const normalized = exposureRisk || this._normalizeExposureRisk(null);
     const levelText = this._titleCase(String(normalized.level || "Unknown").replaceAll("_", " ").toLowerCase());
     const reasons = Array.isArray(normalized.reasons) ? normalized.reasons : [];
-    const azimuthText = normalized.azimuth === null ? "—" : `${Number(normalized.azimuth).toFixed(2)}°`;
-    const elevationText = normalized.elevation === null ? "—" : `${Number(normalized.elevation).toFixed(2)}°`;
+    const azimuthText = normalized.azimuth === null ? "â€”" : `${Number(normalized.azimuth).toFixed(2)}Â°`;
+    const elevationText = normalized.elevation === null ? "â€”" : `${Number(normalized.elevation).toFixed(2)}Â°`;
 
     return `
       <div class="ai-readout-kv">
@@ -7977,9 +7877,9 @@ _getAssetTimelineItems(attrs) {
       };
     });
 
-    // ✅ SHOW ALL TOGGLE
+    // âœ… SHOW ALL TOGGLE
     this.querySelectorAll("[data-show-all-sensors]").forEach((el) => {
-      // ✅ prevent duplicate binding
+      // âœ… prevent duplicate binding
       if (el.dataset.bound === "true") {
         return;
       }
@@ -7988,16 +7888,16 @@ _getAssetTimelineItems(attrs) {
         const fieldPath = el.getAttribute("data-show-all-sensors");
         if (!fieldPath) return;
 
-        // ✅ update state
+        // âœ… update state
         this._showAllSensorsByMetric[fieldPath] = e.target.checked === true;
 
-        // ✅ find the picker for this metric
+        // âœ… find the picker for this metric
         const picker = this.querySelector(
           `ha-entity-picker[data-metric="${fieldPath}"]`
         );
 
         if (picker) {
-          // ✅ force refresh and recalc filtering state
+          // âœ… force refresh and recalc filtering state
           picker.dataset.initialized = "false";
           if (typeof picker.requestUpdate === "function") {
             try { picker.requestUpdate(); } catch (e) {}
@@ -8218,7 +8118,7 @@ _getAssetTimelineItems(attrs) {
         return;
       }
 
-      // ✅ Step 1 — Create asset (ONLY critical step)
+      // âœ… Step 1 â€” Create asset (ONLY critical step)
       let assetCreated = false;
 
       const selectedLabels = Array.isArray(draft?.label_ids)
@@ -8251,11 +8151,11 @@ _getAssetTimelineItems(attrs) {
       } catch (err) {
         console.error("Create asset failed", err);
         alert("Failed to create asset");
-        return; // ✅ STOP — this is the only real failure case
+        return; // âœ… STOP â€” this is the only real failure case
       }
 
 
-      // ✅ Step 2 — Link device (non-critical)
+      // âœ… Step 2 â€” Link device (non-critical)
       if (draft.device_id) {
         try {
           await this._callService("asset_intelligence", "link_to_device", {
@@ -8268,7 +8168,7 @@ _getAssetTimelineItems(attrs) {
       }
 
 
-      // ✅ Step 3 — Reload UI and wait for room projection to settle
+      // âœ… Step 3 â€” Reload UI and wait for room projection to settle
       try {
         await this._waitForAssetVisibleInRoom(assetId, draft.area_id || null);
       } catch (loadErr) {
@@ -8276,7 +8176,7 @@ _getAssetTimelineItems(attrs) {
       }
 
 
-      // ✅ Step 4 — Close dialog
+      // âœ… Step 4 â€” Close dialog
       dialog.remove();
 
     }
@@ -8348,10 +8248,10 @@ _getAssetTimelineItems(attrs) {
 
       const attrs = e.attributes;
 
-      // ✅ Must be an asset
+      // âœ… Must be an asset
       if (attrs.asset_id === undefined) return false;
 
-      // ✅ EXCLUDE derived / projection entities
+      // âœ… EXCLUDE derived / projection entities
 
       // Filter out "At Risk" style entities by name
       const name = (attrs.friendly_name || attrs.name || "").toLowerCase();
@@ -8526,22 +8426,22 @@ _getAssetTimelineItems(attrs) {
     if (!raw) return raw;
 
     return raw
+      .replaceAll("Ã‚Â°F", "degF")
       .replaceAll("Â°F", "degF")
-      .replaceAll("°F", "degF")
+      .replaceAll("Ã‚Âµg/mÃ‚Â³", "ug/m3")
       .replaceAll("Âµg/mÂ³", "ug/m3")
-      .replaceAll("µg/m³", "ug/m3")
+      .replaceAll("COÃ¢â€šâ€š", "CO2")
       .replaceAll("COâ‚‚", "CO2")
-      .replaceAll("CO₂", "CO2")
+      .replaceAll("NOÃ¢â€šâ€š", "NO2")
       .replaceAll("NOâ‚‚", "NO2")
-      .replaceAll("NO₂", "NO2")
+      .replaceAll("Ã¢â‚¬â€", "-")
       .replaceAll("â€”", "-")
-      .replaceAll("—", "-")
+      .replaceAll("Ã¢â‚¬Â¢", " | ")
       .replaceAll("â€¢", " | ")
-      .replaceAll("•", " | ")
+      .replaceAll("Ã¢â€ â€™", "->")
       .replaceAll("â†’", "->")
-      .replaceAll("→", "->")
-      .replaceAll("â€¦", "...")
-      .replaceAll("…", "...");
+      .replaceAll("Ã¢â‚¬Â¦", "...")
+      .replaceAll("â€¦", "...");
   }
 
   _getAssetTypeOptions() {
@@ -8744,7 +8644,7 @@ _getAssetTimelineItems(attrs) {
   }
 
   _summarizeLabels(labels, assetType) {
-    if (!Array.isArray(labels) || labels.length === 0) return "—";
+    if (!Array.isArray(labels) || labels.length === 0) return "â€”";
 
     const normalizedType = String(assetType || "")
       .trim()
@@ -8759,7 +8659,7 @@ _getAssetTimelineItems(attrs) {
       })
       .slice(0, 3);
 
-    return summary.length ? summary.join(" • ") : "—";
+    return summary.length ? summary.join(" â€¢ ") : "â€”";
   }
 
   _renderBreadcrumb(items) {
@@ -8918,7 +8818,7 @@ _getAssetTimelineItems(attrs) {
 
     Object.entries(categoryConfig).forEach(([categoryName, metrics]) => {
       if (categoryName === "windows") {
-        return; // ✅ windows are NOT part of environment_config
+        return; // âœ… windows are NOT part of environment_config
       }
 
       environment_config[categoryName] = {};
@@ -8940,7 +8840,7 @@ _getAssetTimelineItems(attrs) {
       });
     });
 
-    // ✅ DO NOT include windows here
+    // âœ… DO NOT include windows here
     return environment_config;
   }
 
@@ -8963,7 +8863,7 @@ _getAssetTimelineItems(attrs) {
         {
           area_id: roomId,
           environment_config,
-          windows   // ✅ separate field
+          windows   // âœ… separate field
         }
       );
 
@@ -9062,7 +8962,7 @@ _getAssetTimelineItems(attrs) {
     const [category, metric] = String(fieldPath).split(".");
 
     // --------------------------------------------------
-    // ✅ 1. Check environment_config (new model)
+    // âœ… 1. Check environment_config (new model)
     // --------------------------------------------------
     const envConfig = roomEntity?.attributes?.environment_config;
 
@@ -9072,7 +8972,7 @@ _getAssetTimelineItems(attrs) {
     }
 
     // --------------------------------------------------
-    // ✅ 2. Check source_status.details (current HA pattern)
+    // âœ… 2. Check source_status.details (current HA pattern)
     // --------------------------------------------------
     const details = roomEntity?.attributes?.source_status?.details || {};
     const metricDetail = details[fieldPath];
@@ -9096,7 +8996,7 @@ _getAssetTimelineItems(attrs) {
     }
 
     // --------------------------------------------------
-    // ✅ 3. LAST CHANCE: try direct attribute binding (defensive)
+    // âœ… 3. LAST CHANCE: try direct attribute binding (defensive)
     // --------------------------------------------------
     const direct = roomEntity?.attributes?.[category]?.[metric];
 
@@ -9170,11 +9070,11 @@ _getAssetTimelineItems(attrs) {
           return false;
         }
 
-        // ✅ ALWAYS keep room scoping
+        // âœ… ALWAYS keep room scoping
         const entityAreaId = this._getAreaIdForEntity(entity.entity_id);
         if (entityAreaId !== roomId) return false;
 
-        // ✅ "Show all room sensors" = all same-room entities in the correct domain
+        // âœ… "Show all room sensors" = all same-room entities in the correct domain
         if (showAll) return true;
 
         const attrs = entity.attributes || {};
@@ -9182,12 +9082,12 @@ _getAssetTimelineItems(attrs) {
         const unit = String(attrs.unit_of_measurement || "").toLowerCase();
         const text = `${entity.entity_id} ${attrs.friendly_name || ""}`.toLowerCase();
 
-        // ✅ documented / locked device classes
+        // âœ… documented / locked device classes
         if (requiredDeviceClass) {
           return deviceClass === requiredDeviceClass;
         }
 
-        // ✅ semantic fallback for untyped metrics
+        // âœ… semantic fallback for untyped metrics
         const nameMatch =
           nameIncludes.length > 0 &&
           nameIncludes.some((token) => text.includes(token));
@@ -9284,7 +9184,7 @@ _getAssetTimelineItems(attrs) {
         const fallbackLabel = loanId ? `${loanId} - ${counterparty}` : counterparty;
         return {
           loanId,
-          label: started && started !== "—"
+          label: started && started !== "â€”"
             ? `${counterparty} (${started})`
             : fallbackLabel,
         };
@@ -10287,12 +10187,12 @@ _getAssetTimelineItems(attrs) {
         ? response.exists
         : undefined;
 
-      const providerText = response?.provider || localDoc.provider || "—";
+      const providerText = response?.provider || localDoc.provider || "â€”";
       const availabilityText = available === true ? "Available" : available === false ? "Unavailable" : "Unknown";
       const existsText = exists === true ? "Exists" : exists === false ? "Missing" : "Unknown";
 
       window.alert(
-        `Availability check\n\nDocument: ${localDoc.title || localDoc.filename || localDoc.document_id || "—"}\nProvider: ${providerText}\nStatus: ${availabilityText}\nStorage file: ${existsText}`
+        `Availability check\n\nDocument: ${localDoc.title || localDoc.filename || localDoc.document_id || "â€”"}\nProvider: ${providerText}\nStatus: ${availabilityText}\nStorage file: ${existsText}`
       );
     } catch (err) {
       console.error("Document availability check failed", err);
@@ -10706,8 +10606,8 @@ _getAssetTimelineItems(attrs) {
     if (!window.customElements?.get?.("ha-dialog")) {
       const fallbackText = [
         `Type: ${String(safeItem.kind || "Unknown")}`,
-        `When: ${String(safeItem.meta || "—")}`,
-        `Summary: ${String(safeItem.copy || safeItem.title || "—")}`,
+        `When: ${String(safeItem.meta || "â€”")}`,
+        `Summary: ${String(safeItem.copy || safeItem.title || "â€”")}`,
         "",
         "Details:",
         JSON.stringify(details, null, 2),
@@ -10718,9 +10618,9 @@ _getAssetTimelineItems(attrs) {
 
     const baseRows = [
       ["Type", this._titleCase(String(safeItem.kind || "unknown").replaceAll("_", " "))],
-      ["When", String(safeItem.meta || "—")],
-      ["Title", String(safeItem.title || "—")],
-      ["Summary", String(safeItem.copy || "—")],
+      ["When", String(safeItem.meta || "â€”")],
+      ["Title", String(safeItem.title || "â€”")],
+      ["Summary", String(safeItem.copy || "â€”")],
     ];
 
     const detailRows = Object.entries(details)
@@ -10831,7 +10731,7 @@ _getAssetTimelineItems(attrs) {
 
     const observationPeriod = Number(baseline.observation_period || 0);
     const formatDuration = (seconds) => {
-      if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+      if (!Number.isFinite(seconds) || seconds <= 0) return "â€”";
       const total = Math.floor(seconds);
       const hh = String(Math.floor(total / 3600)).padStart(2, "0");
       const mm = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
@@ -10841,10 +10741,10 @@ _getAssetTimelineItems(attrs) {
 
     const baselineRows = [
       ["Observation count", baseline.observation_count],
-      ["Observation start", baseline.observation_start ? this._formatLocalDateTime(baseline.observation_start) : "—"],
-      ["Observation end", baseline.observation_end ? this._formatLocalDateTime(baseline.observation_end) : "—"],
+      ["Observation start", baseline.observation_start ? this._formatLocalDateTime(baseline.observation_start) : "â€”"],
+      ["Observation end", baseline.observation_end ? this._formatLocalDateTime(baseline.observation_end) : "â€”"],
       ["Observation period", formatDuration(observationPeriod)],
-      ["Confidence", baseline.confidence || "—"],
+      ["Confidence", baseline.confidence || "â€”"],
     ];
 
     if (baseline.avg_temperature !== undefined && baseline.avg_temperature !== null) {
@@ -10864,7 +10764,7 @@ _getAssetTimelineItems(attrs) {
       .map(([label, value]) => `
         <div style="display:grid; grid-template-columns: 180px minmax(0,1fr); gap:10px; padding:7px 0; border-bottom:1px solid rgba(0,0,0,0.06);">
           <div style="font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.03em;">${this._escapeHtml(String(label))}</div>
-          <div style="font-size:14px; color:var(--primary-text-color);">${this._escapeHtml(String(value ?? "—"))}</div>
+          <div style="font-size:14px; color:var(--primary-text-color);">${this._escapeHtml(String(value ?? "â€”"))}</div>
         </div>
       `)
       .join("");
@@ -10875,21 +10775,21 @@ _getAssetTimelineItems(attrs) {
         if (!metric || typeof metric !== "object") return "";
         const name = String(metric.name || metric.key || "Metric");
         const unit = metric.unit ? String(metric.unit) : "";
-        const avg = metric.avg ?? "—";
-        const min = metric.min ?? "—";
-        const max = metric.max ?? "—";
-        const last = metric.last ?? "—";
-        const samples = metric.samples ?? "—";
+        const avg = metric.avg ?? "â€”";
+        const min = metric.min ?? "â€”";
+        const max = metric.max ?? "â€”";
+        const last = metric.last ?? "â€”";
+        const samples = metric.samples ?? "â€”";
         const suffix = unit ? ` ${unit}` : "";
         return `
           <div style="padding:8px 0; border-bottom:1px solid rgba(0,0,0,0.05);">
             <div style="font-size:13px; font-weight:700; color:var(--primary-text-color); margin-bottom:4px;">${this._escapeHtml(name)}</div>
             <div style="font-size:13px; color:var(--secondary-text-color); line-height:1.45;">
               Average: <strong>${this._escapeHtml(String(avg))}${this._escapeHtml(suffix)}</strong>
-              • Min: ${this._escapeHtml(String(min))}${this._escapeHtml(suffix)}
-              • Max: ${this._escapeHtml(String(max))}${this._escapeHtml(suffix)}
-              • Last: ${this._escapeHtml(String(last))}${this._escapeHtml(suffix)}
-              • Samples: ${this._escapeHtml(String(samples))}
+              â€¢ Min: ${this._escapeHtml(String(min))}${this._escapeHtml(suffix)}
+              â€¢ Max: ${this._escapeHtml(String(max))}${this._escapeHtml(suffix)}
+              â€¢ Last: ${this._escapeHtml(String(last))}${this._escapeHtml(suffix)}
+              â€¢ Samples: ${this._escapeHtml(String(samples))}
             </div>
           </div>
         `;
@@ -10919,7 +10819,7 @@ _getAssetTimelineItems(attrs) {
 
   _renderActivityDialogValue(value) {
     if (value === null || value === undefined || value === "") {
-      return `<span style="color:var(--secondary-text-color);">—</span>`;
+      return `<span style="color:var(--secondary-text-color);">â€”</span>`;
     }
 
     if (Array.isArray(value)) {
@@ -11417,7 +11317,7 @@ _getAssetTimelineItems(attrs) {
 
       // Initial device list
       this._populateDeviceSelect(devicePicker, roomId);
-      devicePicker.value = null;   // ✅ REQUIRED for ha-combo-box to render
+      devicePicker.value = null;   // âœ… REQUIRED for ha-combo-box to render
 
       const updateSaveState = () => {
         const rawName = String(nameInput.value || "").trim();
@@ -11588,7 +11488,7 @@ _getAssetTimelineItems(attrs) {
   }
 
   _formatLocalDateTime(value) {
-    if (!value) return "—";
+    if (!value) return "â€”";
     const dt = new Date(value);
     if (Number.isNaN(dt.getTime())) return String(value);
 
@@ -11623,7 +11523,7 @@ _getAssetTimelineItems(attrs) {
   _compactReason(value) {
     const text = String(value || "").trim().replace(/\.$/, "");
     if (!text) return "Environmental Risk";
-    return text.length > 32 ? `${text.slice(0, 29)}…` : text;
+    return text.length > 32 ? `${text.slice(0, 29)}â€¦` : text;
   }
 
 
