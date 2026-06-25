@@ -82,6 +82,9 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._subscribedConnection = null;
     this._renderDebounceTimer = null;
     this._renderQueued = false;
+    this._suppressAssetPickerDraftWrites = false;
+    this._measurementActionInFlight = {};
+    this._assetOverflowDocBound = false;
 
     // MutationObserver to catch HA picker/selector elements that upgrade later
     this._ai_mutation_observer = new MutationObserver((mutations) => {
@@ -3891,6 +3894,9 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     const labels = this._normalizeLabelList(deviceMeta.labels);
 
+    this._suppressAssetPickerDraftWrites = true;
+    try {
+
     // --------------------------------------------------
     // âœ… Restore draft values into normal input/select/textarea fields
     // --------------------------------------------------
@@ -3940,9 +3946,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
       if (!areaPicker.dataset.assetDraftBound) {
         areaPicker.addEventListener("value-changed", (ev) => {
+          if (this._suppressAssetPickerDraftWrites) return;
           if (!this._assetInfoDrafts[assetId]) {
             this._assetInfoDrafts[assetId] = {};
           }
+          if (ev.detail?.value === undefined) return;
           this._assetInfoDrafts[assetId].area_id = ev.detail?.value || "";
           this._refreshAssetInfoSaveState();
         });
@@ -3963,9 +3971,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
       if (!labelsPicker.dataset.assetDraftBound) {
         labelsPicker.addEventListener("value-changed", (ev) => {
+          if (this._suppressAssetPickerDraftWrites) return;
           if (!this._assetInfoDrafts[assetId]) {
             this._assetInfoDrafts[assetId] = {};
           }
+          if (ev.detail?.value === undefined) return;
           this._assetInfoDrafts[assetId].labels = Array.isArray(ev.detail?.value)
             ? ev.detail.value
             : [];
@@ -3979,6 +3989,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     // âœ… Action button state
     // --------------------------------------------------
     this._refreshAssetInfoSaveState();
+    } finally {
+      // Keep suppression on through immediate microtasks triggered by picker value assignment.
+      Promise.resolve().then(() => {
+        this._suppressAssetPickerDraftWrites = false;
+      });
+    }
   }
 
   _bindAssetDetailInteractionGuards() {
@@ -7566,11 +7582,35 @@ _getAssetTimelineItems(attrs) {
       const button = wrap.querySelector(".ai-overflow-button");
       if (button) {
         button.onclick = (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          wrap.classList.toggle("open");
+          const shouldOpen = !wrap.classList.contains("open");
+          this.querySelectorAll("[data-asset-overflow].open").forEach((otherWrap) => {
+            if (otherWrap !== wrap) otherWrap.classList.remove("open");
+          });
+          wrap.classList.toggle("open", shouldOpen);
         };
       }
+
+      wrap.querySelectorAll(".ai-overflow-item").forEach((item) => {
+        item.onclick = (e) => {
+          e.stopPropagation();
+          wrap.classList.remove("open");
+        };
+      });
     });
+
+    if (!this._assetOverflowDocBound) {
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest("[data-asset-overflow]")) return;
+        this.querySelectorAll("[data-asset-overflow].open").forEach((wrap) => {
+          wrap.classList.remove("open");
+        });
+      });
+      this._assetOverflowDocBound = true;
+    }
 
     this.querySelectorAll("[data-asset-info-watch]").forEach((el) => {
       const refresh = () => this._refreshAssetInfoSaveState();
@@ -7960,14 +8000,6 @@ _getAssetTimelineItems(attrs) {
       picker.dataset.boundPicker = "true";
     });
 
-    this.querySelectorAll(".ai-overflow-button").forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        const parent = btn.closest(".ai-overflow");
-        parent.classList.toggle("open");
-      };
-    });
-
     this.querySelectorAll("[data-asset-measure]").forEach((el) => {
       el.onclick = async (e) => {
         e.preventDefault();
@@ -7975,15 +8007,29 @@ _getAssetTimelineItems(attrs) {
 
         const assetId = String(el.getAttribute("data-asset-measure") || "").trim();
         if (!assetId) return;
+        if (this._measurementActionInFlight[assetId]) return;
+
+        const onCurrentAsset = this._view?.type === "asset-detail" && this._view?.assetId === assetId;
+        const wasDirtyBefore = onCurrentAsset ? this._hasUnsavedAssetDetailChanges(assetId) : true;
+        this._measurementActionInFlight[assetId] = true;
 
         try {
+          el.disabled = true;
           await this._callService("asset_intelligence", "start_measurement", { asset_id: assetId });
           await this._load();
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
+
+          if (onCurrentAsset && !wasDirtyBefore && this._hasUnsavedAssetDetailChanges(assetId)) {
+            this._discardAssetDetailDrafts(assetId);
+            this._refreshAssetInfoSaveState();
+          }
         } catch (err) {
           console.error("Failed to start measurement", err);
           alert("Failed to start measurement");
+        } finally {
+          this._measurementActionInFlight[assetId] = false;
+          el.disabled = false;
         }
       };
     });
@@ -7995,15 +8041,29 @@ _getAssetTimelineItems(attrs) {
 
         const assetId = String(el.getAttribute("data-asset-stop-measure") || "").trim();
         if (!assetId) return;
+        if (this._measurementActionInFlight[assetId]) return;
+
+        const onCurrentAsset = this._view?.type === "asset-detail" && this._view?.assetId === assetId;
+        const wasDirtyBefore = onCurrentAsset ? this._hasUnsavedAssetDetailChanges(assetId) : true;
+        this._measurementActionInFlight[assetId] = true;
 
         try {
+          el.disabled = true;
           await this._callService("asset_intelligence", "stop_measurement", { asset_id: assetId });
           await this._load();
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
+
+          if (onCurrentAsset && !wasDirtyBefore && this._hasUnsavedAssetDetailChanges(assetId)) {
+            this._discardAssetDetailDrafts(assetId);
+            this._refreshAssetInfoSaveState();
+          }
         } catch (err) {
           console.error("Failed to stop measurement", err);
           alert("Failed to stop measurement");
+        } finally {
+          this._measurementActionInFlight[assetId] = false;
+          el.disabled = false;
         }
       };
     });
