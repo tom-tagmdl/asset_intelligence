@@ -8520,7 +8520,15 @@ _getAssetTimelineItems(attrs) {
   _resolveDocumentImageUrl(assetId, doc) {
     if (!doc || typeof doc !== "object") return null;
 
-    const directUrl = doc?.url || doc?.image_url || doc?.thumbnail_url || doc?.preview_url || null;
+    const directUrl =
+      doc?.thumbnail_url
+      || doc?.preview_url
+      || doc?.preview_uri
+      || doc?.image_url
+      || doc?.url
+      || doc?.preview?.url
+      || doc?.access?.preview?.url
+      || null;
     if (directUrl) return directUrl;
 
     const normalizedAssetId = String(assetId || "").trim();

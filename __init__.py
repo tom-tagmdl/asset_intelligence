@@ -4,6 +4,7 @@ import asyncio
 import base64
 import binascii
 import csv
+import hashlib
 import json
 import os
 import uuid
@@ -1063,7 +1064,29 @@ class AssetIntelligenceDocumentView(HomeAssistantView):
             raise web.HTTPInternalServerError(text="Failed to read stored document") from ex
 
         mime_type = str(document_record.get("mime_type") or "application/octet-stream")
-        return web.Response(body=content, content_type=mime_type)
+        etag_source = "|".join(
+            [
+                str(provider_document_id or ""),
+                str(document_record.get("created_at") or ""),
+                str(document_record.get("modified_at") or ""),
+                str(document_record.get("size_bytes") or len(content)),
+            ]
+        )
+        etag = hashlib.sha1(etag_source.encode("utf-8")).hexdigest()
+
+        if request.headers.get("If-None-Match") == etag:
+            return web.Response(
+                status=304,
+                headers={
+                    "ETag": etag,
+                    "Cache-Control": "private, max-age=3600",
+                },
+            )
+
+        response = web.Response(body=content, content_type=mime_type)
+        response.headers["ETag"] = etag
+        response.headers["Cache-Control"] = "private, max-age=3600"
+        return response
 
 
 def _ensure_document_view_registered(hass: HomeAssistant) -> None:
