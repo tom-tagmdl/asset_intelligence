@@ -4691,16 +4691,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const imageUrl = this._resolvePrimaryDocumentImage(attrs) || areaImageUrl || attrs.image || attrs.primary_image || attrs.image_url || null;
     const icon = area?.icon || "mdi:home";
     const updatedText = this._formatLocalDateTime(attrs.last_updated);
-    const isProtectedApi = imageUrl && String(imageUrl).startsWith("/api/asset_intelligence/document/");
 
     return `
       <div class="ai-card ai-room-click" data-room="${this._escapeHtml(areaId)}">
         <div class="ai-card-top ${imageUrl ? "has-image" : ""}" ${
-          imageUrl
-            ? (isProtectedApi
-              ? `data-ai-image-url="${this._escapeHtml(imageUrl)}"`
-              : `style="background-image:url('${this._escapeHtml(imageUrl)}')"`)
-            : ""
+          imageUrl ? this._buildImageContainerAttrs(imageUrl) : ""
         }>
         ${
           imageUrl
@@ -4811,16 +4806,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const confidenceColor = this._confidenceColor(confidence);
     const icon = this._getAssetIcon(attrs.asset_type, deviceMeta.labels);
     const imageUrl = this._resolvePrimaryDocumentImage(attrs) || attrs.image || attrs.primary_image || attrs.image_url || null;
-    const isProtectedApi = imageUrl && String(imageUrl).startsWith("/api/asset_intelligence/document/");
 
     return `
       <div class="ai-card ai-asset-click">
         <div class="ai-card-top ${imageUrl ? "has-image" : ""}" ${
-          imageUrl
-            ? (isProtectedApi
-              ? `data-ai-image-url="${this._escapeHtml(imageUrl)}"`
-              : `style="background-image:url('${this._escapeHtml(imageUrl)}')"`)
-            : ""
+          imageUrl ? this._buildImageContainerAttrs(imageUrl) : ""
         }>
           ${
             imageUrl
@@ -4959,16 +4949,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           ? "ai-risk-reason-text ai-value-moderate"
           : "ai-risk-reason-text";
 
-    const isProtectedApi = imageUrl && String(imageUrl).startsWith("/api/asset_intelligence/document/");
-
     return `
       <div class="ai-card ai-room-asset-card ai-asset-click" data-asset="${this._escapeHtml(attrs.asset_id)}">
         <div class="ai-card-top ${imageUrl ? "has-image" : ""}" ${
-          imageUrl
-            ? (isProtectedApi
-              ? `data-ai-image-url="${this._escapeHtml(imageUrl)}"`
-              : `style="background-image:url('${this._escapeHtml(imageUrl)}')"`)
-            : ""
+          imageUrl ? this._buildImageContainerAttrs(imageUrl) : ""
         }>
           ${
             imageUrl
@@ -5188,7 +5172,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     const icon = this._getAssetIcon(attrs.asset_type, deviceMeta.labels);
     const imageUrl = this._resolvePrimaryDocumentImage(attrs) || attrs.image || attrs.primary_image || attrs.image_url || null;
-    const isProtectedApi = imageUrl && String(imageUrl).startsWith("/api/asset_intelligence/document/");
 
     const riskState = String(
       attrs.environment_risk_state ||
@@ -5504,9 +5487,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
             <div
               class="ai-asset-hero ${imageUrl ? "has-image" : ""}"
               ${imageUrl
-                ? (isProtectedApi
-                  ? `data-ai-image-url="${this._escapeHtml(imageUrl)}"`
-                  : `style="background-image:url('${this._escapeHtml(imageUrl)}')"`)
+                ? this._buildImageContainerAttrs(imageUrl)
                 : ""}
             >
               ${
@@ -8547,6 +8528,25 @@ _getAssetTimelineItems(attrs) {
     if (!normalizedAssetId || !documentId) return null;
 
     return `/api/asset_intelligence/document/${encodeURIComponent(normalizedAssetId)}/${encodeURIComponent(documentId)}`;
+  }
+
+  _buildImageContainerAttrs(imageUrl) {
+    if (!imageUrl) return "";
+
+    const rawUrl = String(imageUrl);
+    const escapedRawUrl = this._escapeHtml(rawUrl);
+    const isProtectedApi = rawUrl.startsWith("/api/asset_intelligence/document/");
+
+    if (!isProtectedApi) {
+      return `style="background-image:url('${escapedRawUrl}')"`;
+    }
+
+    const cachedBlobUrl = this._protectedImageBlobCache?.[rawUrl];
+    if (cachedBlobUrl) {
+      return `style="background-image:url('${this._escapeHtml(cachedBlobUrl)}')" data-ai-image-url="${escapedRawUrl}"`;
+    }
+
+    return `data-ai-image-url="${escapedRawUrl}"`;
   }
 
   async _getAuthenticatedImageUrl(imageUrl) {
