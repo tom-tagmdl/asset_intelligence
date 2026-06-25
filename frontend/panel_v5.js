@@ -79,6 +79,9 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._roomConfigInteractionTimer = null;
     // ✅ Cache for authenticated protected image blob URLs
     this._protectedImageBlobCache = {};
+    this._subscribedConnection = null;
+    this._renderDebounceTimer = null;
+    this._renderQueued = false;
 
     // MutationObserver to catch HA picker/selector elements that upgrade later
     this._ai_mutation_observer = new MutationObserver((mutations) => {
@@ -216,7 +219,16 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     try { this._ai_mutation_observer?.disconnect(); } catch (e) {}
     if (super.disconnectedCallback) super.disconnectedCallback();
     try { if (this._docStorageEventUnsub) this._docStorageEventUnsub(); } catch (e) {}
+    this._docStorageEventUnsub = null;
     try { if (this._labelRegistryEventUnsub) this._labelRegistryEventUnsub(); } catch (e) {}
+    this._labelRegistryEventUnsub = null;
+    this._subscribedConnection = null;
+    try {
+      if (this._renderDebounceTimer) {
+        clearTimeout(this._renderDebounceTimer);
+        this._renderDebounceTimer = null;
+      }
+    } catch (e) {}
     try {
       if (this._measurementTicker) {
         clearInterval(this._measurementTicker);
@@ -257,32 +269,40 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       return;
     }
 
-    // Subscribe to document storage availability events so UI refreshes automatically
+    // Subscribe once per active HA connection so we do not churn subscriptions
+    // on every state update (which can happen very frequently in production).
     try {
-      if (this._docStorageEventUnsub) {
-        try { this._docStorageEventUnsub(); } catch (e) {}
-        this._docStorageEventUnsub = null;
-      }
+      const connection = this._hass?.connection || null;
+      if (
+        connection
+        && connection !== this._subscribedConnection
+        && typeof connection.subscribeEvents === "function"
+      ) {
+        if (this._docStorageEventUnsub) {
+          try { this._docStorageEventUnsub(); } catch (e) {}
+          this._docStorageEventUnsub = null;
+        }
 
-      if (this._labelRegistryEventUnsub) {
-        try { this._labelRegistryEventUnsub(); } catch (e) {}
-        this._labelRegistryEventUnsub = null;
-      }
+        if (this._labelRegistryEventUnsub) {
+          try { this._labelRegistryEventUnsub(); } catch (e) {}
+          this._labelRegistryEventUnsub = null;
+        }
 
-      if (this._hass && this._hass.connection && typeof this._hass.connection.subscribeEvents === "function") {
-        this._docStorageEventUnsub = this._hass.connection.subscribeEvents((event) => {
+        this._docStorageEventUnsub = connection.subscribeEvents((event) => {
           try {
             const avail = event?.data?.available;
             if (typeof avail === "boolean") {
               this._documentStorageAvailable = avail;
             }
-            this._render();
+            this._scheduleRender(0);
           } catch (e) {}
         }, "asset_intelligence_document_storage_availability_changed");
 
-        this._labelRegistryEventUnsub = this._hass.connection.subscribeEvents(() => {
+        this._labelRegistryEventUnsub = connection.subscribeEvents(() => {
           this._refreshLabelRegistry();
         }, "label_registry_updated");
+
+        this._subscribedConnection = connection;
       }
     } catch (e) {}
 
@@ -290,7 +310,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       return;
     }
 
-    this._render();
+    this._scheduleRender(120);
 
     if (this._labelRegistry.length) {
       this._applyLabelRegistryToPickers();
@@ -2950,6 +2970,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
     if (typeof this._initializeAssetDetailPickers === "function") {
       this._initializeAssetDetailPickers();
+    }
+
+    if (typeof this._primeProtectedImageBackgrounds === "function") {
+      this._primeProtectedImageBackgrounds();
     }
 
     if (this._view?.type === "asset-detail") {
@@ -8592,12 +8616,48 @@ _getAssetTimelineItems(attrs) {
 
       this._getAuthenticatedImageUrl(imageUrl).then((resolvedUrl) => {
         if (resolvedUrl) {
+          if (el.dataset.aiResolvedImageUrl === resolvedUrl) return;
           el.style.backgroundImage = `url('${resolvedUrl}')`;
+          el.dataset.aiResolvedImageUrl = resolvedUrl;
         }
       }).catch((err) => {
         console.error("Error applying authenticated image", err);
       });
     });
+  }
+
+  _primeProtectedImageBackgrounds() {
+    const imageElements = this.querySelectorAll("[data-ai-image-url]");
+    imageElements.forEach((el) => {
+      const imageUrl = el.getAttribute("data-ai-image-url");
+      if (!imageUrl) return;
+
+      const cached = this._protectedImageBlobCache?.[imageUrl];
+      if (!cached) return;
+
+      if (el.dataset.aiResolvedImageUrl === cached) return;
+      el.style.backgroundImage = `url('${cached}')`;
+      el.dataset.aiResolvedImageUrl = cached;
+    });
+  }
+
+  _scheduleRender(delayMs = 100) {
+    try {
+      if (this._renderDebounceTimer) {
+        clearTimeout(this._renderDebounceTimer);
+      }
+    } catch (e) {}
+
+    this._renderDebounceTimer = setTimeout(() => {
+      this._renderDebounceTimer = null;
+      if (this._renderQueued) return;
+      this._renderQueued = true;
+
+      requestAnimationFrame(() => {
+        this._renderQueued = false;
+        this._render();
+      });
+    }, Math.max(0, Number(delayMs) || 0));
   }
 
   _summarizeLabels(labels, assetType) {
