@@ -972,28 +972,55 @@ def _build_asset_history_payload(asset: Dict[str, Any], max_entries: int = 80) -
                 }
             )
 
-    sorted_entries = sorted(entries, key=lambda item: int(item.get("_ts") or 0), reverse=True)[:max_entries]
+    full_sorted_entries = sorted(
+        entries,
+        key=lambda item: int(item.get("_ts") or 0),
+        reverse=True,
+    )
+    sorted_entries = full_sorted_entries[:max_entries]
 
     def _filter_for(name: str) -> list[Dict[str, Any]]:
+        source_entries = full_sorted_entries
         if name == "all":
             return sorted_entries
         if name == "audit":
-            return [entry for entry in sorted_entries if str(entry.get("kind") or "") == "audit"]
+            return [
+                entry
+                for entry in source_entries
+                if str(entry.get("kind") or "") == "audit"
+            ][:max_entries]
         if name == "environment":
             return [
                 entry
-                for entry in sorted_entries
+                for entry in source_entries
                 if str(entry.get("kind") or "") == "environment"
                 or "environment" in (entry.get("categories") or [])
-            ]
+            ][:max_entries]
         if name == "risk":
-            return [entry for entry in sorted_entries if str(entry.get("kind") or "") == "risk"]
+            return [
+                entry
+                for entry in source_entries
+                if str(entry.get("kind") or "") == "risk"
+            ][:max_entries]
         if name == "documents":
-            return [entry for entry in sorted_entries if "documents" in (entry.get("categories") or [])]
+            return [
+                entry
+                for entry in source_entries
+                if "documents" in (entry.get("categories") or [])
+            ][:max_entries]
         if name == "custody":
-            return [entry for entry in sorted_entries if "custody" in (entry.get("categories") or []) or str(entry.get("kind") or "") == "custody"]
+            return [
+                entry
+                for entry in source_entries
+                if "custody" in (entry.get("categories") or [])
+                or str(entry.get("kind") or "") == "custody"
+            ][:max_entries]
         if name == "measurements":
-            return [entry for entry in sorted_entries if str(entry.get("kind") or "") == "measurements"]
+            return [
+                entry
+                for entry in source_entries
+                if str(entry.get("kind") or "") == "measurements"
+            ][:max_entries]
         return []
 
     return {
