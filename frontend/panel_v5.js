@@ -1613,16 +1613,16 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           color: var(--secondary-text-color);
         }
 
+        @media (max-width: 900px) {
+          .ai-room-metrics-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+
         .ai-status-bar {
           display: flex;
           height: 36px;
           width: 100%;
-                  @media (max-width: 900px) {
-                    .ai-room-metrics-grid {
-                      grid-template-columns: 1fr;
-                    }
-                  }
-
           border-top: 1px solid #ddd;
         }
 
