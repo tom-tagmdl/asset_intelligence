@@ -12,354 +12,342 @@ globalThis.__AI_WINDOW_EXPOSURES = WINDOW_EXPOSURES;
 var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
   "photo",
   "receipt",
-  "invoice",
-  "warranty",
-  "manual",
-  "appraisal",
-  "insurance_policy",
-  "certificate_of_authenticity",
-  "provenance_record",
-  "condition_report",
-  "restoration_record",
-  "loan_agreement",
-  "shipping_document",
-  "installation_instructions",
-  "maintenance_record",
-  "other",
-];
-globalThis.__AI_DOCUMENT_TYPES = DOCUMENT_TYPES;
+    const asset = this._getAssetEntityByAssetId(assetId);
+    if (!asset || !this._hass) return;
 
-var PHYSICAL_DOCUMENT_LOCATIONS = globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS || [
-  "safe",
-  "safe_deposit_box",
-  "binder",
-  "offsite_archive",
-  "with_agent",
-  "bank",
-  "other",
-];
-globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS = PHYSICAL_DOCUMENT_LOCATIONS;
+    const attrs = asset.attributes || {};
+    const modeText = String(mode || "").toLowerCase();
+    if (modeText !== "upload" && modeText !== "attach") return;
 
-// Max safe size for base64-encoded websocket uploads (4MB limit / 1.33 base64 expansion = ~3MB)
-var MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES || (3 * 1024 * 1024);
-globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
+    const isUpload = modeText === "upload";
+    const title = isUpload ? "Upload document" : "Attach external document";
+    const submitLabel = isUpload ? "Upload" : "Attach";
+    const defaultType = "insurance_policy";
+    const generatedDocumentId = this._createClientDocumentId();
 
-var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelligenceApp extends HTMLElement {
-  constructor() {
-    super();
-    this._view = { type: "home" };
-    this._hass = null;
-    this._areas = [];
-    this._floors = [];
-    this._loaded = false;
-    this._loadError = null;
-    this._entityRegistry = [];
-    this._roomConfig = {};
-    this._systemDefaults = {};
-    this._editingMetric = null;
-    this._editingWindowIndex = null;
-    this.deviceRegistry = [];
-    this._draftMetrics = {};
-    this._draftWindows = {};
-    this._showAllSensorsByMetric = {};
-    this._labelRegistry = [];
-    // ✅ Temporary unsaved values for Asset Detail form fields
-    this._assetInfoDrafts = {};
-    // ✅ Temporary unsaved values for Asset Detail environment limits
-    this._assetEnvironmentDrafts = {};
-    this._assetHistoryFilter = "all";
-    this._assetHistoryCache = {};
-    this._assetHistoryLoading = {};
-    this._roomHistoryFilterByRoom = {};
-    this._roomHistoryAssetFilterByRoom = {};
-    this._measurementTicker = null;
-    this._assetDetailInteractionActive = false;
-    this._assetDetailInteractionTimer = null;
-    this._roomConfigInteractionActive = false;
-    this._roomConfigInteractionTimer = null;
-    // ✅ Cache for authenticated protected image blob URLs
-    this._protectedImageBlobCache = {};
-    this._subscribedConnection = null;
-    this._renderDebounceTimer = null;
-    this._renderQueued = false;
+    const uploadFields = `
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-type">Document type</label>
+        <select id="ai-doc-type" class="ai-dialog-select" name="type" required>
+          ${DOCUMENT_TYPES.map((docType) => `
+            <option value="${this._escapeHtml(docType)}" ${docType === defaultType ? "selected" : ""}>
+              ${this._escapeHtml(this._titleCase(docType.replaceAll("_", " ")))}
+            </option>
+          `).join("")}
+        </select>
+      </div>
 
-    // MutationObserver to catch HA picker/selector elements that upgrade later
-    this._ai_mutation_observer = new MutationObserver((mutations) => {
-      for (const m of mutations) {
-        for (const node of Array.from(m.addedNodes)) {
-          if (!(node instanceof HTMLElement)) continue;
-          const tag = (node.tagName || "").toLowerCase();
-          if (["ha-area-picker","ha-labels-picker","ha-selector","ha-icon-picker","ha-entity-picker"].includes(tag)) {
-            try {
-              if (this._hass) node.hass = this._hass;
-            } catch (e) {}
-            if (tag === "ha-selector" && (node.selector === undefined || node.selector === null)) {
-              try { node.selector = {}; } catch (e) {}
-            }
-            if (tag === "ha-labels-picker" && (node.value === undefined || node.value === null)) {
-              try { node.value = []; } catch (e) {}
-            }
-            if ((tag === "ha-area-picker" || tag === "ha-entity-picker") && (node.value === undefined || node.value === null)) {
-              try { node.value = ""; } catch (e) {}
-            }
-            if (typeof node.requestUpdate === "function") {
-              try { node.requestUpdate(); } catch (e) {}
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-document-file">Document file</label>
+        <input id="ai-doc-document-file" class="ai-dialog-input" name="document_file" type="file" required />
+        <div style="font-size:12px; color:var(--secondary-text-color);">
+          Choose the file directly from your browser instead of entering a Home Assistant path.
+          <br/><strong>Maximum file size: 3 MB</strong>
+        </div>
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-filename">Filename override (optional)</label>
+        <input id="ai-doc-filename" class="ai-dialog-input" name="filename" type="text" placeholder="policy_2026.pdf" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-title">Title</label>
+        <input id="ai-doc-title" class="ai-dialog-input" name="title" type="text" placeholder="Insurance Policy 2026" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-date">Document date</label>
+        <input id="ai-doc-date" class="ai-dialog-input" name="date" type="date" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-tags">Tags (comma separated)</label>
+        <input id="ai-doc-tags" class="ai-dialog-input" name="tags" type="text" placeholder="insurance, policy" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-notes">Notes</label>
+        <textarea id="ai-doc-notes" class="ai-dialog-input" style="min-height:84px; resize:vertical;" name="notes"></textarea>
+      </div>
+    `;
+
+    const attachFields = `
+      <input type="hidden" name="document_id" value="${this._escapeHtml(generatedDocumentId)}" />
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-type">Document type</label>
+        <select id="ai-doc-type" class="ai-dialog-select" name="type" required>
+          ${DOCUMENT_TYPES.map((docType) => `
+            <option value="${this._escapeHtml(docType)}" ${docType === defaultType ? "selected" : ""}>
+              ${this._escapeHtml(this._titleCase(docType.replaceAll("_", " ")))}
+            </option>
+          `).join("")}
+        </select>
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-title">Title</label>
+        <input id="ai-doc-title" class="ai-dialog-input" name="title" type="text" placeholder="Insurance Policy 2026" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-provider-document-id">Document URL / Reference</label>
+        <input id="ai-doc-provider-document-id" class="ai-dialog-input" name="provider_document_id" type="text" placeholder="https://vault.example.com/policies/policy_2026.pdf" required />
+        <div style="font-size:12px; color:var(--secondary-text-color);">Link to the document location (URL, path, or reference ID)</div>
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-location">External location reference</label>
+        <input id="ai-doc-location" class="ai-dialog-input" name="location" type="text" placeholder="Bank archive reference" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-date">Document date</label>
+        <input id="ai-doc-date" class="ai-dialog-input" name="date" type="date" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-tags">Tags (comma separated)</label>
+        <input id="ai-doc-tags" class="ai-dialog-input" name="tags" type="text" placeholder="insurance, policy" />
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-notes">Notes</label>
+        <textarea id="ai-doc-notes" class="ai-dialog-input" style="min-height:84px; resize:vertical;" name="notes"></textarea>
+      </div>
+    `;
+
+    const physicalFields = `
+      <div style="border-top:1px solid var(--divider-color); margin-top:4px; padding-top:12px;"></div>
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-physical-location">Physical original location (optional)</label>
+        <select id="ai-doc-physical-location" class="ai-dialog-select" name="physical_location">
+          <option value="">No physical location to record</option>
+          ${PHYSICAL_DOCUMENT_LOCATIONS.map((locationValue) => `
+            <option value="${this._escapeHtml(locationValue)}">
+              ${this._escapeHtml(this._titleCase(locationValue.replaceAll("_", " ")))}
+            </option>
+          `).join("")}
+        </select>
+      </div>
+
+      <div class="ai-dialog-field">
+        <label class="ai-dialog-field-label" for="ai-doc-physical-notes">Physical location notes</label>
+        <input id="ai-doc-physical-notes" class="ai-dialog-input" name="physical_notes" type="text" placeholder="Safe in closet / Bank box #12" />
+      </div>
+    `;
+
+    const dialog = document.createElement("ha-dialog");
+    dialog.open = true;
+    dialog.setAttribute("header-title", title);
+    dialog.setAttribute("type", "alert");
+    dialog.scrimClickAction = true;
+    dialog.escapeKeyAction = true;
+
+    dialog.innerHTML = `
+      <style>
+        .ai-dialog-shell { min-width: 560px; max-width: 700px; }
+        .ai-dialog-body { display:flex; flex-direction:column; gap:12px; padding:16px 24px; max-height:68vh; overflow:auto; }
+        .ai-dialog-field { display:flex; flex-direction:column; gap:6px; }
+        .ai-dialog-field-label { font-size:12px; font-weight:600; color:var(--secondary-text-color); letter-spacing:0.02em; }
+        .ai-dialog-input { width:100%; min-height:44px; box-sizing:border-box; padding:10px 12px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; outline:none; }
+        .ai-dialog-select { width:100%; min-height:44px; box-sizing:border-box; padding:0 12px; border:1px solid var(--divider-color); border-radius:8px; background:var(--card-background-color); color:var(--primary-text-color); font-size:14px; outline:none; appearance:auto; }
+        .ai-dialog-actions { display:flex; justify-content:flex-end; align-items:center; gap:10px; padding:10px 24px 20px; }
+      </style>
+
+      <div class="ai-dialog-shell">
+        <form class="ai-dialog-body" data-document-workflow-form>
+          ${isUpload ? uploadFields : attachFields}
+          ${physicalFields}
+        </form>
+        <div class="ai-dialog-actions">
+          <button class="ai-secondary-button" type="button" data-document-workflow-cancel>Cancel</button>
+          <button class="ai-primary-button" type="button" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    let settled = false;
+    const closeDialog = () => {
+      if (settled) return;
+      settled = true;
+      try { dialog.open = false; } catch (e) {}
+      dialog.remove();
+    };
+
+    const form = dialog.querySelector("[data-document-workflow-form]");
+    const submitBtn = dialog.querySelector("[data-document-workflow-submit]");
+    const cancelBtn = dialog.querySelector("[data-document-workflow-cancel]");
+
+    const readValue = (name) => {
+      const field = form?.querySelector(`[name="${name}"]`);
+      return String(field?.value || "").trim();
+    };
+
+    cancelBtn?.addEventListener("click", closeDialog);
+
+    if (isUpload) {
+      const fileInput = form?.querySelector('[name="document_file"]');
+      const maxSizeBytes = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
+      const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
+
+      let fileSizeWarning = document.createElement("div");
+      fileSizeWarning.id = "ai-file-size-warning";
+      fileSizeWarning.style.cssText = "display:none; padding:8px 10px; margin-top:4px; background:#fff3cd; border:1px solid #ffc107; border-radius:4px; color:#856404; font-size:13px;";
+      fileInput?.parentElement?.appendChild(fileSizeWarning);
+
+      fileInput?.addEventListener("change", (e) => {
+        if (e.target.files && e.target.files[0]) {
+          const fileSize = e.target.files[0].size;
+          if (fileSize > maxSizeBytes) {
+            fileSizeWarning.textContent = `Warning: File size (${(fileSize / (1024 * 1024)).toFixed(1)} MB) exceeds maximum of ${maxSizeMB} MB. Please select a smaller file.`;
+            fileSizeWarning.style.display = "block";
+            submitBtn.disabled = true;
+          } else {
+            fileSizeWarning.style.display = "none";
+            submitBtn.disabled = false;
+          }
+        }
+      });
+    }
+
+    submitBtn?.addEventListener("click", async () => {
+      const type = readValue("type");
+      if (!type) {
+        alert("Document type is required.");
+        return;
+      }
+
+      const physicalLocation = readValue("physical_location");
+      const physicalNotes = readValue("physical_notes");
+
+      submitBtn.disabled = true;
+      try {
+        if (isUpload) {
+          const selectedDocument = await this._readFileInputAsBase64(form, "document_file", {
+            required: true,
+            maxBytes: MAX_BROWSER_DOCUMENT_UPLOAD_BYTES,
+          });
+
+          const uploadPayload = {
+            asset_id: assetId,
+            type,
+            content_base64: selectedDocument.contentBase64,
+            uploaded_filename: selectedDocument.filename,
+          };
+
+          const filename = readValue("filename");
+          const titleValue = readValue("title");
+          const dateValue = readValue("date");
+          const notesValue = readValue("notes");
+          const tags = this._normalizeCsvToList(readValue("tags"));
+
+          if (selectedDocument.mimeType) uploadPayload.mime_type = selectedDocument.mimeType;
+          if (selectedDocument.sizeBytes > 0) uploadPayload.size_bytes = selectedDocument.sizeBytes;
+          if (filename) uploadPayload.filename = filename;
+          if (titleValue) uploadPayload.title = titleValue;
+          if (dateValue) uploadPayload.date = dateValue;
+          if (notesValue) uploadPayload.notes = notesValue;
+          if (tags.length) uploadPayload.tags = tags;
+
+          const canUseHttpApi = typeof this._hass?.callApi === "function";
+          if (!canUseHttpApi && selectedDocument.sizeBytes > 750 * 1024) {
+            throw new Error("File is too large for this connection mode. Please use a smaller file or configure path-based upload.");
+          }
+
+          await this._callService("asset_intelligence", "upload_document", uploadPayload);
+          await this._load();
+
+          if (physicalLocation) {
+            const refreshedAsset = this._getAssetEntityByAssetId(assetId);
+            const refreshedDocs = Array.isArray(refreshedAsset?.attributes?.documents)
+              ? refreshedAsset.attributes.documents
+              : [];
+
+            const docByLastId = refreshedDocs.find((doc) => String(doc?.document_id || "") === String(refreshedAsset?.attributes?.last_document_id || ""));
+            const fallbackDoc = refreshedDocs.length ? refreshedDocs[refreshedDocs.length - 1] : null;
+            const targetDoc = docByLastId || fallbackDoc;
+
+            await this._callService("asset_intelligence", "add_physical_document_location", {
+              asset_id: assetId,
+              type,
+              location: physicalLocation,
+              notes: physicalNotes || "",
+              document_id: targetDoc?.document_id || null,
+              provider_document_id: targetDoc?.provider_document_id || null,
+              title: targetDoc?.title || titleValue || null,
+            });
+            await this._load();
+          }
+        } else {
+          const providerDocumentId = readValue("provider_document_id");
+          if (!providerDocumentId) {
+            throw new Error("Provider document ID is required for external attach.");
+          }
+
+          const attachPayload = {
+            asset_id: assetId,
+            document_id: readValue("document_id") || generatedDocumentId,
+            type,
+            provider_document_id: providerDocumentId,
+          };
+
+          const optionalTextFields = [
+            "title",
+            "location",
+            "date",
+            "notes",
+          ];
+
+          optionalTextFields.forEach((fieldName) => {
+            const value = readValue(fieldName);
+            if (value) attachPayload[fieldName] = value;
+          });
+
+          const sizeBytesValue = readValue("size_bytes");
+          if (sizeBytesValue) {
+            const numericSize = Number(sizeBytesValue);
+            if (!Number.isNaN(numericSize) && numericSize >= 0) {
+              attachPayload.size_bytes = numericSize;
             }
           }
+
+          const tags = this._normalizeCsvToList(readValue("tags"));
+          if (tags.length) attachPayload.tags = tags;
+
+          await this._callService("asset_intelligence", "attach_document", attachPayload);
+
+          if (physicalLocation) {
+            await this._callService("asset_intelligence", "add_physical_document_location", {
+              asset_id: assetId,
+              type,
+              location: physicalLocation,
+              notes: physicalNotes || "",
+              document_id: attachPayload.document_id,
+              provider_document_id: attachPayload.provider_document_id,
+              title: attachPayload.title || null,
+            });
+          }
+
+          await this._load();
+        }
+
+        closeDialog();
+      } catch (err) {
+        console.error("Document workflow failed", err);
+        const detailedMessage = this._extractErrorMessage(err);
+        alert(detailedMessage || "Document workflow failed. Verify fields and try again.");
+      } finally {
+        if (!settled) {
+          submitBtn.disabled = false;
         }
       }
     });
-    this._docStorageEventUnsub = null;
-    this._labelRegistryEventUnsub = null;
-    this._documentStorageAvailable = null; // null = unknown, true/false = explicit
-    this._boundShowDialogHandler = this._handleShowDialogEvent.bind(this);
-    this._boundBeforeUnloadHandler = this._handleBeforeUnload.bind(this);
-  }
 
-  connectedCallback() {
-    if (super.connectedCallback) super.connectedCallback();
-    document.addEventListener("show-dialog", this._boundShowDialogHandler);
-    window.addEventListener("beforeunload", this._boundBeforeUnloadHandler);
-    this._bindRoomConfigDelegation();
-  }
-
-  _bindRoomConfigDelegation() {
-    // Single delegated handler on the component root — survives innerHTML replacement.
-    // Handles all room-config action buttons (edit, save, cancel, remove metric).
-    if (this._roomConfigDelegationBound) return;
-    this._roomConfigDelegationBound = true;
-
-    // Set interaction guard on pointerdown so a pending hass update
-    // can't replace the DOM between pointerdown and click.
-    this.addEventListener("pointerdown", (e) => {
-      if (this._view?.type !== "room-config") return;
-      const btn = e.target?.closest(
-        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric],[data-add-window],[data-edit-window],[data-save-window],[data-cancel-window],[data-remove-window],[data-window-direction],[data-window-exposure]"
-      );
-      if (!btn) return;
-      this._roomConfigInteractionActive = true;
-      if (this._roomConfigInteractionTimer) clearTimeout(this._roomConfigInteractionTimer);
-      this._roomConfigInteractionTimer = setTimeout(() => {
-        this._roomConfigInteractionActive = false;
-        this._roomConfigInteractionTimer = null;
-      }, 800);
-    }, true);
-
-    this.addEventListener("click", (e) => {
-      if (this._view?.type !== "room-config") return;
-
-      const editBtn = e.target?.closest("[data-edit-metric]");
-      if (editBtn) {
-        e.stopPropagation();
-        const fieldPath = editBtn.getAttribute("data-edit-metric");
-        if (!fieldPath) return;
-        this._roomConfigInteractionActive = false;
-        this._editingMetric = fieldPath;
-        this._render();
-        requestAnimationFrame(() => {
-          Promise.resolve().then(() => {
-            const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
-            if (!picker) return;
-            try { picker.hass = this._hass; } catch (_) {}
-            try {
-              const roomId = this._view?.roomId;
-              if (roomId) picker.entityFilter = this._createMetricEntityFilter(roomId, fieldPath);
-            } catch (_) {}
-            try { if (typeof picker.requestUpdate === "function") picker.requestUpdate(); } catch (_) {}
-          });
-        });
-        return;
-      }
-
-      const cancelBtn = e.target?.closest("[data-cancel-metric]");
-      if (cancelBtn) {
-        e.stopPropagation();
-        const fieldPath = cancelBtn.getAttribute("data-cancel-metric");
-        if (fieldPath && this._draftMetrics[fieldPath]) delete this._draftMetrics[fieldPath];
-        this._editingMetric = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const removeBtn = e.target?.closest("[data-remove-metric]");
-      if (removeBtn) {
-        e.stopPropagation();
-        const fieldPath = removeBtn.getAttribute("data-remove-metric");
-        if (fieldPath) this._draftMetrics[fieldPath] = { entity: "" };
-        this._editingMetric = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const saveBtn = e.target?.closest("[data-save-metric]");
-      if (saveBtn) {
-        e.stopPropagation();
-        const fieldPath = saveBtn.getAttribute("data-save-metric");
-        if (!fieldPath) return;
-        const picker = this.querySelector(`ha-entity-picker[data-metric="${fieldPath}"]`);
-        const selected =
-          this._draftMetrics[fieldPath]?.entity ??
-          picker?.value ??
-          picker?.entityId ??
-          picker?.selected ??
-          "";
-        if (!this._draftMetrics[fieldPath]) this._draftMetrics[fieldPath] = {};
-        this._draftMetrics[fieldPath].entity = selected;
-        this._editingMetric = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const editWindowBtn = e.target?.closest("[data-edit-window]");
-      if (editWindowBtn) {
-        e.stopPropagation();
-        this._editingWindowIndex = Number(editWindowBtn.getAttribute("data-edit-window"));
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const cancelWindowBtn = e.target?.closest("[data-cancel-window]");
-      if (cancelWindowBtn) {
-        e.stopPropagation();
-        this._editingWindowIndex = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const removeWindowBtn = e.target?.closest("[data-remove-window]");
-      if (removeWindowBtn) {
-        e.stopPropagation();
-        const index = Number(removeWindowBtn.getAttribute("data-remove-window"));
-        if (!confirm("Remove this window?")) return;
-
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === this._view.roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(this._view.roomId, room);
-        windows.splice(index, 1);
-
-        this._draftWindows[this._view.roomId] = windows;
-        this._editingWindowIndex = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-
-      const saveWindowBtn = e.target?.closest("[data-save-window]");
-      if (saveWindowBtn) {
-        e.stopPropagation();
-
-        const index = Number(saveWindowBtn.getAttribute("data-save-window"));
-        const roomId = this._view.roomId;
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-        const draftWindow = windows[index] || { direction: "", exposure: "" };
-
-        if (!draftWindow.direction || !draftWindow.exposure) {
-          alert("Select both direction and exposure");
-          return;
-        }
-
-        this._draftWindows[roomId] = windows;
-        this._editingWindowIndex = null;
-        this._roomConfigInteractionActive = false;
-        this._render();
-        return;
-      }
-    }, true);
-
-    this.addEventListener("change", (e) => {
-      if (this._view?.type !== "room-config") return;
-
-      const directionSelect = e.target?.closest("[data-window-direction]");
-      if (directionSelect) {
-        e.stopPropagation();
-
-        const index = Number(directionSelect.getAttribute("data-window-direction"));
-        const roomId = this._view.roomId;
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-        if (!windows[index]) {
-          windows[index] = { direction: "", exposure: "" };
-        }
-
-        windows[index].direction = directionSelect.value || "";
-        this._draftWindows[roomId] = windows;
-        this._roomConfigInteractionActive = true;
-        return;
-      }
-
-      const exposureSelect = e.target?.closest("[data-window-exposure]");
-      if (exposureSelect) {
-        e.stopPropagation();
-
-        const index = Number(exposureSelect.getAttribute("data-window-exposure"));
-        const roomId = this._view.roomId;
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-        if (!windows[index]) {
-          windows[index] = { direction: "", exposure: "" };
-        }
-
-        windows[index].exposure = exposureSelect.value || "";
-        this._draftWindows[roomId] = windows;
-        this._roomConfigInteractionActive = true;
-      }
-    }, true);
-  }
-
-  disconnectedCallback() {
-    try { this._ai_mutation_observer?.disconnect(); } catch (e) {}
-    if (super.disconnectedCallback) super.disconnectedCallback();
-    try { if (this._docStorageEventUnsub) this._docStorageEventUnsub(); } catch (e) {}
-    this._docStorageEventUnsub = null;
-    try { if (this._labelRegistryEventUnsub) this._labelRegistryEventUnsub(); } catch (e) {}
-    this._labelRegistryEventUnsub = null;
-    this._subscribedConnection = null;
-    try {
-      if (this._renderDebounceTimer) {
-        clearTimeout(this._renderDebounceTimer);
-        this._renderDebounceTimer = null;
-      }
-    } catch (e) {}
-    try {
-      if (this._measurementTicker) {
-        clearInterval(this._measurementTicker);
-        this._measurementTicker = null;
-      }
-    } catch (e) {}
-    try { document.removeEventListener("show-dialog", this._boundShowDialogHandler); } catch (e) {}
-    try { window.removeEventListener("beforeunload", this._boundBeforeUnloadHandler); } catch (e) {}
-    // Clean up blob URLs
-    try {
-      Object.values(this._protectedImageBlobCache || {}).forEach((blobUrl) => {
-        try { URL.revokeObjectURL(blobUrl); } catch (e) {}
-      });
-      this._protectedImageBlobCache = {};
-    } catch (e) {}
-  }
-
-  set hass(hass) {
-    this._hass = hass;
+    dialog.addEventListener("closed", closeDialog);
 
     // ✅ If the user is editing Asset Detail and has unsaved draft values,
     // do NOT repaint the screen from live backend updates.
@@ -9917,61 +9905,49 @@ _getAssetTimelineItems(attrs) {
           ${isUpload ? uploadFields : attachFields}
           ${physicalFields}
         </form>
-          <div class="ai-room-metrics-grid">
-            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
-              <div class="ai-data-label">Climate</div>
-              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Lux, UV">
-              <div class="ai-data-label">Light</div>
-              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
-            </div>
-            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
-              <div class="ai-data-label">Air Quality</div>
-              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
-            </div>
-            <div class="ai-room-metric-item" title="PM2.5, PM10">
-              <div class="ai-data-label">Particulates</div>
-              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Mold index">
-              <div class="ai-data-label">Biological</div>
-              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Leak">
-              <div class="ai-data-label">Safety</div>
-              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Pressure, vibration">
-              <div class="ai-data-label">Structural</div>
-              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Noise">
-              <div class="ai-data-label">Context</div>
-              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="CO₂">
-              <div class="ai-data-label">Control Context</div>
-              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Configured windows for this room">
-              <div class="ai-data-label">Windows</div>
-              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
-            </div>
-          </div>
+        <div class="ai-dialog-actions">
+          <button class="ai-secondary-button" type="button" data-document-workflow-cancel>Cancel</button>
+          <button class="ai-primary-button" type="button" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    let settled = false;
+    const closeDialog = () => {
+      if (settled) return;
+      settled = true;
+      try { dialog.open = false; } catch (e) {}
+      dialog.remove();
+    };
+
+    const form = dialog.querySelector("[data-document-workflow-form]");
+    const submitBtn = dialog.querySelector("[data-document-workflow-submit]");
+    const cancelBtn = dialog.querySelector("[data-document-workflow-cancel]");
+
+    const readValue = (name) => {
+      const field = form?.querySelector(`[name="${name}"]`);
+      return String(field?.value || "").trim();
+    };
+
+    cancelBtn?.addEventListener("click", closeDialog);
+
+    if (isUpload) {
+      const fileInput = form?.querySelector('[name="document_file"]');
       const maxSizeBytes = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
       const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
-      
+
       let fileSizeWarning = document.createElement("div");
       fileSizeWarning.id = "ai-file-size-warning";
       fileSizeWarning.style.cssText = "display:none; padding:8px 10px; margin-top:4px; background:#fff3cd; border:1px solid #ffc107; border-radius:4px; color:#856404; font-size:13px;";
       fileInput?.parentElement?.appendChild(fileSizeWarning);
-      
+
       fileInput?.addEventListener("change", (e) => {
         if (e.target.files && e.target.files[0]) {
           const fileSize = e.target.files[0].size;
           if (fileSize > maxSizeBytes) {
-            fileSizeWarning.textContent = `⚠️ File size (${(fileSize / (1024 * 1024)).toFixed(1)} MB) exceeds maximum of ${maxSizeMB} MB. Please select a smaller file.`;
+            fileSizeWarning.textContent = `File size (${(fileSize / (1024 * 1024)).toFixed(1)} MB) exceeds maximum of ${maxSizeMB} MB. Please select a smaller file.`;
             fileSizeWarning.style.display = "block";
             submitBtn.disabled = true;
           } else {
@@ -10175,48 +10151,37 @@ _getAssetTimelineItems(attrs) {
           </div>
         </div>
 
-          <div class="ai-room-metrics-grid">
-            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
-              <div class="ai-data-label">Climate</div>
-              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Lux, UV">
-              <div class="ai-data-label">Light</div>
-              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
-            </div>
-            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
-              <div class="ai-data-label">Air Quality</div>
-              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
-            </div>
-            <div class="ai-room-metric-item" title="PM2.5, PM10">
-              <div class="ai-data-label">Particulates</div>
-              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Mold index">
-              <div class="ai-data-label">Biological</div>
-              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Leak">
-              <div class="ai-data-label">Safety</div>
-              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Pressure, vibration">
-              <div class="ai-data-label">Structural</div>
-              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Noise">
-              <div class="ai-data-label">Context</div>
-              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="CO₂">
-              <div class="ai-data-label">Control Context</div>
-              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Configured windows for this room">
-              <div class="ai-data-label">Windows</div>
-              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
-            </div>
-          </div>
+        <div class="ai-dialog-actions">
+          <button class="ai-secondary-button" type="button" data-physical-cancel>Cancel</button>
+          <button class="ai-primary-button" type="button" data-physical-save>Save</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    let settled = false;
+    const closeDialog = () => {
+      if (settled) return;
+      settled = true;
+      try { dialog.open = false; } catch (e) {}
+      dialog.remove();
+    };
+
+    const locationInput = dialog.querySelector("#ai-physical-location");
+    const notesInput = dialog.querySelector("#ai-physical-notes");
+    const saveBtn = dialog.querySelector("[data-physical-save]");
+
+    dialog.querySelector("[data-physical-cancel]")?.addEventListener("click", closeDialog);
+
+    saveBtn?.addEventListener("click", async () => {
+      const location = String(locationInput?.value || "").trim();
+      if (!location) {
+        alert("Location is required.");
+        return;
+      }
+
+      saveBtn.disabled = true;
       try {
         await this._callService("asset_intelligence", "add_physical_document_location", {
           asset_id: assetId,
@@ -10261,14 +10226,14 @@ _getAssetTimelineItems(attrs) {
 
     const info = serviceInfo && typeof serviceInfo === "object" ? serviceInfo : {};
     const lines = [
-      `Title: ${localDoc.title || localDoc.filename || "—"}`,
+      `Title: ${localDoc.title || localDoc.filename || "-"}`,
       `Type: ${this._titleCase(String(localDoc.type || "other").replaceAll("_", " "))}`,
-      `Document ID: ${localDoc.document_id || "—"}`,
-      `Provider: ${info.provider || localDoc.provider || "—"}`,
-      `Provider document ID: ${info.provider_document_id || localDoc.provider_document_id || "—"}`,
-      `Filename: ${info.filename || localDoc.filename || "—"}`,
-      `MIME type: ${info.mime_type || localDoc.mime_type || "—"}`,
-      `Size (bytes): ${info.size_bytes ?? localDoc.size_bytes ?? "—"}`,
+      `Document ID: ${localDoc.document_id || "-"}`,
+      `Provider: ${info.provider || localDoc.provider || "-"}`,
+      `Provider document ID: ${info.provider_document_id || localDoc.provider_document_id || "-"}`,
+      `Filename: ${info.filename || localDoc.filename || "-"}`,
+      `MIME type: ${info.mime_type || localDoc.mime_type || "-"}`,
+      `Size (bytes): ${info.size_bytes ?? localDoc.size_bytes ?? "-"}`,
       `Available: ${info.available === true ? "Yes" : info.available === false ? "No" : "Unknown"}`,
       `Exists: ${info.exists === true ? "Yes" : info.exists === false ? "No" : "Unknown"}`,
     ];
