@@ -6491,8 +6491,15 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 _getAssetEnvironmentDraft(assetId, attrs) {
     if (!assetId) return {};
     if (!this._assetEnvironmentDrafts[assetId]) {
+      const listEntity = this._hass?.states?.["sensor.asset_intelligence_asset_list"];
+      const listAssets = Array.isArray(listEntity?.attributes?.assets)
+        ? listEntity.attributes.assets
+        : [];
+      const listAsset = listAssets.find((item) => String(item?.asset_id || "") === String(assetId));
+
       const requirements =
         attrs?.environment_requirements ||
+        listAsset?.environment_requirements ||
         {};
       this._assetEnvironmentDrafts[assetId] = JSON.parse(JSON.stringify(requirements));
     }
@@ -6703,8 +6710,15 @@ _getAssetEnvironmentDraft(assetId, attrs) {
 
   _renderEnvironmentCategory(title, attrs, categoryKey, metricKeys) {
     const assetId = this._view?.assetId;
+    const listEntity = this._hass?.states?.["sensor.asset_intelligence_asset_list"];
+    const listAssets = Array.isArray(listEntity?.attributes?.assets)
+      ? listEntity.attributes.assets
+      : [];
+    const listAsset = listAssets.find((item) => String(item?.asset_id || "") === String(assetId || ""));
+    const listRequirements = listAsset?.environment_requirements || {};
     const liveRequirements =
       attrs.environment_requirements?.[categoryKey] ||
+      listRequirements?.[categoryKey] ||
       this._readPath(attrs, `environment_requirements.${categoryKey}`) ||
       {};
     const draftRequirements = assetId
@@ -7710,6 +7724,7 @@ _getAssetTimelineItems(attrs) {
 
       const handleChange = () => {
         applyDraftValue();
+        this._render();
       };
 
       el.addEventListener("input", handleInput);
@@ -7733,6 +7748,7 @@ _getAssetTimelineItems(attrs) {
 
       const handleChange = () => {
         applyDraftValue();
+        this._render();
       };
 
       el.addEventListener("input", handleInput);

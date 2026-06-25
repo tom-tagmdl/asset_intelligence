@@ -326,19 +326,31 @@ def _compact_sensor_attributes_for_recorder(attrs: Dict[str, Any], max_bytes: in
     if _estimate_attr_size(reduced) <= max_bytes:
         return reduced
 
-    for key in [
-        "advisories",
-        "spatial_context",
-        "descriptions",
-        "type_metadata",
-        "environment_requirements",
-        "room_environment",
-        "last_environment_event",
-        "physical_document_locations",
-    ]:
-        if key in reduced:
-            reduced.pop(key, None)
-            reduced[f"{key}_truncated"] = True
+    # Keep current-card data intact. Only compact task/history payloads.
+    history_trimming_steps = [8, 3, 0]
+    for step in history_trimming_steps:
+        if step == 0:
+            reduced["audit_log"] = []
+            reduced["environment_events"] = []
+            reduced["custody_events"] = []
+            reduced["audit_log_truncated"] = True
+            reduced["environment_events_truncated"] = True
+            reduced["custody_events_truncated"] = True
+        else:
+            reduced["audit_log"] = _compact_audit_log(reduced.get("audit_log"), max_entries=step)
+
+            env_events: Any | None = reduced.get("environment_events")
+            if isinstance(env_events, list) and len(env_events) > step:
+                reduced["environment_events"] = env_events[-step:]
+
+            custody_events: Any | None = reduced.get("custody_events")
+            if isinstance(custody_events, list) and len(custody_events) > step:
+                reduced["custody_events"] = custody_events[-step:]
+
+            summary: Any | None = reduced.get("audit_summary")
+            if isinstance(summary, list) and len(summary) > step:
+                reduced["audit_summary"] = summary[:step]
+
         if _estimate_attr_size(reduced) <= max_bytes:
             break
 
