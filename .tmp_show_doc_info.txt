@@ -1,0 +1,34 @@
+  async _showDocumentInfoDialog(assetId, documentId) {
+    const localDoc = this._getDocumentRecordForAsset(assetId, documentId);
+    if (!localDoc) {
+      alert("Document not found.");
+      return;
+    }
+
+    let serviceInfo = null;
+    try {
+      serviceInfo = await this._callServiceWithResponse("asset_intelligence", "get_document_info", {
+        asset_id: assetId,
+        document_id: documentId,
+      });
+    } catch (err) {
+      console.warn("get_document_info response unavailable; using local document record", err);
+    }
+
+    const info = serviceInfo && typeof serviceInfo === "object" ? serviceInfo : {};
+    const lines = [
+      `Title: ${localDoc.title || localDoc.filename || "G현"}`,
+      `Type: ${this._titleCase(String(localDoc.type || "other").replaceAll("_", " "))}`,
+      `Document ID: ${localDoc.document_id || "G현"}`,
+      `Provider: ${info.provider || localDoc.provider || "G현"}`,
+      `Provider document ID: ${info.provider_document_id || localDoc.provider_document_id || "G현"}`,
+      `Filename: ${info.filename || localDoc.filename || "G현"}`,
+      `MIME type: ${info.mime_type || localDoc.mime_type || "G현"}`,
+      `Size (bytes): ${info.size_bytes ?? localDoc.size_bytes ?? "G현"}`,
+      `Available: ${info.available === true ? "Yes" : info.available === false ? "No" : "Unknown"}`,
+      `Exists: ${info.exists === true ? "Yes" : info.exists === false ? "No" : "Unknown"}`,
+    ];
+
+    window.alert(lines.join("\n"));
+  }
+
