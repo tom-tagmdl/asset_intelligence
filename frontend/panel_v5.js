@@ -134,7 +134,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this.addEventListener("pointerdown", (e) => {
       if (this._view?.type !== "room-config") return;
       const btn = e.target?.closest(
-        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric]"
+        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric],[data-add-window],[data-edit-window],[data-save-window],[data-cancel-window],[data-remove-window],[data-window-direction],[data-window-exposure]"
       );
       if (!btn) return;
       this._roomConfigInteractionActive = true;
@@ -211,6 +211,118 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         this._roomConfigInteractionActive = false;
         this._render();
         return;
+      }
+
+      const editWindowBtn = e.target?.closest("[data-edit-window]");
+      if (editWindowBtn) {
+        e.stopPropagation();
+        this._editingWindowIndex = Number(editWindowBtn.getAttribute("data-edit-window"));
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const cancelWindowBtn = e.target?.closest("[data-cancel-window]");
+      if (cancelWindowBtn) {
+        e.stopPropagation();
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const removeWindowBtn = e.target?.closest("[data-remove-window]");
+      if (removeWindowBtn) {
+        e.stopPropagation();
+        const index = Number(removeWindowBtn.getAttribute("data-remove-window"));
+        if (!confirm("Remove this window?")) return;
+
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === this._view.roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(this._view.roomId, room);
+        windows.splice(index, 1);
+
+        this._draftWindows[this._view.roomId] = windows;
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const saveWindowBtn = e.target?.closest("[data-save-window]");
+      if (saveWindowBtn) {
+        e.stopPropagation();
+
+        const index = Number(saveWindowBtn.getAttribute("data-save-window"));
+        const roomId = this._view.roomId;
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(roomId, room);
+        const draftWindow = windows[index] || { direction: "", exposure: "" };
+
+        if (!draftWindow.direction || !draftWindow.exposure) {
+          alert("Select both direction and exposure");
+          return;
+        }
+
+        this._draftWindows[roomId] = windows;
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+    }, true);
+
+    this.addEventListener("change", (e) => {
+      if (this._view?.type !== "room-config") return;
+
+      const directionSelect = e.target?.closest("[data-window-direction]");
+      if (directionSelect) {
+        e.stopPropagation();
+
+        const index = Number(directionSelect.getAttribute("data-window-direction"));
+        const roomId = this._view.roomId;
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(roomId, room);
+        if (!windows[index]) {
+          windows[index] = { direction: "", exposure: "" };
+        }
+
+        windows[index].direction = directionSelect.value || "";
+        this._draftWindows[roomId] = windows;
+        this._roomConfigInteractionActive = true;
+        return;
+      }
+
+      const exposureSelect = e.target?.closest("[data-window-exposure]");
+      if (exposureSelect) {
+        e.stopPropagation();
+
+        const index = Number(exposureSelect.getAttribute("data-window-exposure"));
+        const roomId = this._view.roomId;
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(roomId, room);
+        if (!windows[index]) {
+          windows[index] = { direction: "", exposure: "" };
+        }
+
+        windows[index].exposure = exposureSelect.value || "";
+        this._draftWindows[roomId] = windows;
+        this._roomConfigInteractionActive = true;
       }
     }, true);
   }
@@ -1328,8 +1440,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
         .ai-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-          gap: 18px;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 14px;
         }
 
         .ai-card {
@@ -1340,7 +1452,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           display: flex;
           flex-direction: column;
           box-shadow: 0 1px 4px rgba(0,0,0,0.08);
-          min-height: 470px;
+          min-height: 380px;
         }
 
         .ai-card-top {
@@ -1406,6 +1518,28 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           flex: 1;
         }
 
+        .ai-room-click {
+          min-height: 320px;
+        }
+
+        .ai-room-click .ai-card-top {
+          height: 108px;
+        }
+
+        .ai-room-click .ai-card-body {
+          padding: 12px;
+          gap: 6px;
+        }
+
+        .ai-room-click .ai-room-name {
+          font-size: 1.1rem;
+          margin-bottom: 2px;
+        }
+
+        .ai-room-click .ai-room-summary {
+          font-size: 12px;
+        }
+
         .ai-room-name,
         .ai-asset-name {
           font-size: 1.3rem;
@@ -1431,6 +1565,36 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           white-space: nowrap;
         }
 
+        .ai-room-metrics-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 6px 10px;
+          font-size: 12px;
+        }
+
+        .ai-room-metric-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+          min-width: 0;
+        }
+
+        .ai-room-metric-item .ai-data-label,
+        .ai-room-metric-item .ai-data-value {
+          font-size: 12px;
+        }
+
+        .ai-room-metric-item .ai-data-label {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .ai-room-metric-item .ai-data-value {
+          flex: 0 0 auto;
+        }
+
         .ai-highlight {
           font-weight: 700;
           font-size: 1rem;
@@ -1453,6 +1617,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           display: flex;
           height: 36px;
           width: 100%;
+                  @media (max-width: 900px) {
+                    .ai-room-metrics-grid {
+                      grid-template-columns: 1fr;
+                    }
+                  }
+
           border-top: 1px solid #ddd;
         }
 
@@ -7941,15 +8111,6 @@ _getAssetTimelineItems(attrs) {
       };
     });
 
-    // Edit window
-    this.querySelectorAll("[data-edit-window]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-        this._editingWindowIndex = Number(el.getAttribute("data-edit-window"));
-        this._render();
-      };
-    });
-
     this.querySelectorAll("[data-asset-export]").forEach((el) => {
       el.onclick = (e) => {
         e.preventDefault();
@@ -7979,114 +8140,6 @@ _getAssetTimelineItems(attrs) {
         URL.revokeObjectURL(url);
       };
     });
-
-    // Cancel window edit
-    this.querySelectorAll("[data-cancel-window]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-        this._editingWindowIndex = null;
-        this._render();
-      };
-    });
-
-// Window direction change (stage immediately)
-    this.querySelectorAll("[data-window-direction]").forEach((el) => {
-      el.onchange = (e) => {
-        e.stopPropagation();
-
-        const index = Number(el.getAttribute("data-window-direction"));
-        const roomId = this._view.roomId;
-
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-
-        if (!windows[index]) {
-          windows[index] = { direction: "", exposure: "" };
-        }
-
-        windows[index].direction = e.target.value || "";
-        this._draftWindows[roomId] = windows;
-      };
-    });
-
-    // Window exposure change (stage immediately)
-    this.querySelectorAll("[data-window-exposure]").forEach((el) => {
-      el.onchange = (e) => {
-        e.stopPropagation();
-
-        const index = Number(el.getAttribute("data-window-exposure"));
-        const roomId = this._view.roomId;
-
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-
-        if (!windows[index]) {
-          windows[index] = { direction: "", exposure: "" };
-        }
-
-        windows[index].exposure = e.target.value || "";
-        this._draftWindows[roomId] = windows;
-      };
-    });
-
-    // REMOVE WINDOW
-    this.querySelectorAll("[data-remove-window]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const index = Number(el.getAttribute("data-remove-window"));
-        if (!confirm("Remove this window?")) return;
-
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === this._view.roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(this._view.roomId, room);
-        windows.splice(index, 1);
-
-        this._draftWindows[this._view.roomId] = windows;
-        this._editingWindowIndex = null;
-        this._render();
-      };
-    });
-
-    // SAVE WINDOW
-    this.querySelectorAll("[data-save-window]").forEach((el) => {
-      el.onclick = (e) => {
-        e.stopPropagation();
-
-        const index = Number(el.getAttribute("data-save-window"));
-        const roomId = this._view.roomId;
-
-        const room = this._getRoomEntities().find(
-          (r) => r.attributes?.area_id === roomId
-        );
-        if (!room) return;
-
-        const windows = this._getDraftWindows(roomId, room);
-        const draftWindow = windows[index] || { direction: "", exposure: "" };
-
-        if (!draftWindow.direction || !draftWindow.exposure) {
-          alert("Select both direction and exposure");
-          return;
-        }
-
-        this._draftWindows[roomId] = windows;
-        this._editingWindowIndex = null;
-        this._render();
-      };
-    });
-
-
 
     // Final Room Configuration Save (persist full payload)
     this.querySelectorAll("[data-save-room-config]").forEach((el) => {
@@ -9414,37 +9467,48 @@ _getAssetTimelineItems(attrs) {
           ${fieldsHtml}
         </form>
 
-        <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-custody-dialog-cancel>
-            Cancel
-          </button>
-          <button class="ai-primary-button" type="button" data-custody-dialog-submit>
-            ${this._escapeHtml(modeConfig.submitLabel)}
-          </button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(dialog);
-
-    let settled = false;
-    const closeDialog = () => {
-      if (settled) return;
-      settled = true;
-      try { dialog.open = false; } catch (e) {}
-      dialog.remove();
-    };
-
-    const form = dialog.querySelector("[data-custody-form]");
-    const submitBtn = dialog.querySelector("[data-custody-dialog-submit]");
-    const cancelBtn = dialog.querySelector("[data-custody-dialog-cancel]");
-
-    const readValue = (name) => {
-      const field = form?.querySelector(`[name="${name}"]`);
-      return String(field?.value || "").trim();
-    };
-
-    const buildPayload = () => {
+          <div class="ai-room-metrics-grid">
+            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
+              <div class="ai-data-label">Climate</div>
+              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Lux, UV">
+              <div class="ai-data-label">Light</div>
+              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
+            </div>
+            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
+              <div class="ai-data-label">Air Quality</div>
+              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
+            </div>
+            <div class="ai-room-metric-item" title="PM2.5, PM10">
+              <div class="ai-data-label">Particulates</div>
+              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Mold index">
+              <div class="ai-data-label">Biological</div>
+              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Leak">
+              <div class="ai-data-label">Safety</div>
+              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Pressure, vibration">
+              <div class="ai-data-label">Structural</div>
+              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Noise">
+              <div class="ai-data-label">Context</div>
+              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="CO₂">
+              <div class="ai-data-label">Control Context</div>
+              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Configured windows for this room">
+              <div class="ai-data-label">Windows</div>
+              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
+            </div>
+          </div>
       if (mode === "set_status") {
         const status = readValue("status");
         if (!status) {
