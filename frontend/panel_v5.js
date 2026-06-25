@@ -4897,36 +4897,47 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
           <div class="ai-divider"></div>
 
-          <div class="ai-data-grid">
-            <div class="ai-data-label" title="Temperature, humidity, dew point">Climate</div>
-            <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
-
-            <div class="ai-data-label" title="Lux, UV">Light</div>
-            <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
-
-            <div class="ai-data-label" title="VOC, formaldehyde, ozone, NO₂">Air Quality</div>
-            <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
-
-            <div class="ai-data-label" title="PM2.5, PM10">Particulates</div>
-            <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
-
-            <div class="ai-data-label" title="Mold index">Biological</div>
-            <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
-
-            <div class="ai-data-label" title="Leak">Safety</div>
-            <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
-
-            <div class="ai-data-label" title="Pressure, vibration">Structural</div>
-            <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
-
-            <div class="ai-data-label" title="Noise">Context</div>
-            <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
-
-            <div class="ai-data-label" title="CO₂">Control Context</div>
-            <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
-
-            <div class="ai-data-label" title="Configured windows for this room">Windows</div>
-            <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
+          <div class="ai-room-metrics-grid">
+            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
+              <div class="ai-data-label">Climate</div>
+              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Lux, UV">
+              <div class="ai-data-label">Light</div>
+              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
+            </div>
+            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
+              <div class="ai-data-label">Air Quality</div>
+              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
+            </div>
+            <div class="ai-room-metric-item" title="PM2.5, PM10">
+              <div class="ai-data-label">Particulates</div>
+              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Mold index">
+              <div class="ai-data-label">Biological</div>
+              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Leak">
+              <div class="ai-data-label">Safety</div>
+              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Pressure, vibration">
+              <div class="ai-data-label">Structural</div>
+              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Noise">
+              <div class="ai-data-label">Context</div>
+              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="CO₂">
+              <div class="ai-data-label">Control Context</div>
+              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Configured windows for this room">
+              <div class="ai-data-label">Windows</div>
+              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
+            </div>
           </div>
 
           <div class="ai-updated">Updated: ${this._escapeHtml(updatedText)}</div>
@@ -9467,48 +9478,37 @@ _getAssetTimelineItems(attrs) {
           ${fieldsHtml}
         </form>
 
-          <div class="ai-room-metrics-grid">
-            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
-              <div class="ai-data-label">Climate</div>
-              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Lux, UV">
-              <div class="ai-data-label">Light</div>
-              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
-            </div>
-            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
-              <div class="ai-data-label">Air Quality</div>
-              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
-            </div>
-            <div class="ai-room-metric-item" title="PM2.5, PM10">
-              <div class="ai-data-label">Particulates</div>
-              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Mold index">
-              <div class="ai-data-label">Biological</div>
-              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Leak">
-              <div class="ai-data-label">Safety</div>
-              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Pressure, vibration">
-              <div class="ai-data-label">Structural</div>
-              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Noise">
-              <div class="ai-data-label">Context</div>
-              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="CO₂">
-              <div class="ai-data-label">Control Context</div>
-              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
-            </div>
-            <div class="ai-room-metric-item" title="Configured windows for this room">
-              <div class="ai-data-label">Windows</div>
-              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
-            </div>
-          </div>
+        <div class="ai-dialog-actions">
+          <button class="ai-secondary-button" type="button" data-custody-dialog-cancel>
+            Cancel
+          </button>
+          <button class="ai-primary-button" type="button" data-custody-dialog-submit>
+            ${this._escapeHtml(modeConfig.submitLabel)}
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    let settled = false;
+    const closeDialog = () => {
+      if (settled) return;
+      settled = true;
+      try { dialog.open = false; } catch (e) {}
+      dialog.remove();
+    };
+
+    const form = dialog.querySelector("[data-custody-form]");
+    const submitBtn = dialog.querySelector("[data-custody-dialog-submit]");
+    const cancelBtn = dialog.querySelector("[data-custody-dialog-cancel]");
+
+    const readValue = (name) => {
+      const field = form?.querySelector(`[name="${name}"]`);
+      return String(field?.value || "").trim();
+    };
+
+    const buildPayload = () => {
       if (mode === "set_status") {
         const status = readValue("status");
         if (!status) {
@@ -9917,37 +9917,48 @@ _getAssetTimelineItems(attrs) {
           ${isUpload ? uploadFields : attachFields}
           ${physicalFields}
         </form>
-        <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-document-workflow-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(dialog);
-
-    let settled = false;
-    const closeDialog = () => {
-      if (settled) return;
-      settled = true;
-      try { dialog.open = false; } catch (e) {}
-      dialog.remove();
-    };
-
-    const form = dialog.querySelector("[data-document-workflow-form]");
-    const submitBtn = dialog.querySelector("[data-document-workflow-submit]");
-    const cancelBtn = dialog.querySelector("[data-document-workflow-cancel]");
-
-    const readValue = (name) => {
-      const field = form?.querySelector(`[name="${name}"]`);
-      return String(field?.value || "").trim();
-    };
-
-    cancelBtn?.addEventListener("click", closeDialog);
-
-    // Add real-time file size validation for upload workflow
-    if (isUpload) {
-      const fileInput = form?.querySelector('[name="document_file"]');
+          <div class="ai-room-metrics-grid">
+            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
+              <div class="ai-data-label">Climate</div>
+              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Lux, UV">
+              <div class="ai-data-label">Light</div>
+              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
+            </div>
+            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
+              <div class="ai-data-label">Air Quality</div>
+              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
+            </div>
+            <div class="ai-room-metric-item" title="PM2.5, PM10">
+              <div class="ai-data-label">Particulates</div>
+              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Mold index">
+              <div class="ai-data-label">Biological</div>
+              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Leak">
+              <div class="ai-data-label">Safety</div>
+              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Pressure, vibration">
+              <div class="ai-data-label">Structural</div>
+              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Noise">
+              <div class="ai-data-label">Context</div>
+              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="CO₂">
+              <div class="ai-data-label">Control Context</div>
+              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Configured windows for this room">
+              <div class="ai-data-label">Windows</div>
+              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
+            </div>
+          </div>
       const maxSizeBytes = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
       const maxSizeMB = (maxSizeBytes / (1024 * 1024)).toFixed(1);
       
@@ -10164,37 +10175,48 @@ _getAssetTimelineItems(attrs) {
           </div>
         </div>
 
-        <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-physical-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-physical-save>Save</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(dialog);
-
-    let settled = false;
-    const closeDialog = () => {
-      if (settled) return;
-      settled = true;
-      try { dialog.open = false; } catch (e) {}
-      dialog.remove();
-    };
-
-    const locationInput = dialog.querySelector("#ai-physical-location");
-    const notesInput = dialog.querySelector("#ai-physical-notes");
-    const saveBtn = dialog.querySelector("[data-physical-save]");
-
-    dialog.querySelector("[data-physical-cancel]")?.addEventListener("click", closeDialog);
-
-    saveBtn?.addEventListener("click", async () => {
-      const location = String(locationInput?.value || "").trim();
-      if (!location) {
-        alert("Location is required.");
-        return;
-      }
-
-      saveBtn.disabled = true;
+          <div class="ai-room-metrics-grid">
+            <div class="ai-room-metric-item" title="Temperature, humidity, dew point">
+              <div class="ai-data-label">Climate</div>
+              <div class="ai-data-value">${configuredCounts.climate}/${totals.climate}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Lux, UV">
+              <div class="ai-data-label">Light</div>
+              <div class="ai-data-value">${configuredCounts.light}/${totals.light}</div>
+            </div>
+            <div class="ai-room-metric-item" title="VOC, formaldehyde, ozone, NO₂">
+              <div class="ai-data-label">Air Quality</div>
+              <div class="ai-data-value">${configuredCounts.air_quality}/${totals.air_quality}</div>
+            </div>
+            <div class="ai-room-metric-item" title="PM2.5, PM10">
+              <div class="ai-data-label">Particulates</div>
+              <div class="ai-data-value">${configuredCounts.particulates}/${totals.particulates}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Mold index">
+              <div class="ai-data-label">Biological</div>
+              <div class="ai-data-value">${configuredCounts.biological}/${totals.biological}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Leak">
+              <div class="ai-data-label">Safety</div>
+              <div class="ai-data-value">${configuredCounts.safety}/${totals.safety}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Pressure, vibration">
+              <div class="ai-data-label">Structural</div>
+              <div class="ai-data-value">${configuredCounts.structural}/${totals.structural}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Noise">
+              <div class="ai-data-label">Context</div>
+              <div class="ai-data-value">${configuredCounts.context}/${totals.context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="CO₂">
+              <div class="ai-data-label">Control Context</div>
+              <div class="ai-data-value">${configuredCounts.control_context}/${totals.control_context}</div>
+            </div>
+            <div class="ai-room-metric-item" title="Configured windows for this room">
+              <div class="ai-data-label">Windows</div>
+              <div class="ai-data-value">${windowsConfigured}/${windowsTotal}</div>
+            </div>
+          </div>
       try {
         await this._callService("asset_intelligence", "add_physical_document_location", {
           asset_id: assetId,
