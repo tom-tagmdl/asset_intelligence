@@ -3451,7 +3451,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     const controlContext = attrs.control_context || {};
     const windows = Array.isArray(attrs.windows) ? attrs.windows : [];
 
-    const temperatureUnit = this._getUnitForRoomField(room, "climate.temperature", " °F");
+    const temperatureUnit = this._getUnitForRoomField(room, "climate.temperature", " degF");
     const humidityUnit = this._getUnitForRoomField(room, "climate.humidity", " %");
     const dewPointUnit = this._getUnitForRoomField(room, "climate.dew_point", temperatureUnit);
 
@@ -3462,8 +3462,8 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
     const ozoneUnit = this._getUnitForRoomField(room, "air_quality.ozone", " ppb");
     const no2Unit = this._getUnitForRoomField(room, "air_quality.no2", " ppb");
 
-    const pm25Unit = this._getUnitForRoomField(room, "particulates.pm2_5", " µg/m³");
-    const pm10Unit = this._getUnitForRoomField(room, "particulates.pm10", " µg/m³");
+    const pm25Unit = this._getUnitForRoomField(room, "particulates.pm2_5", " ug/m3");
+    const pm10Unit = this._getUnitForRoomField(room, "particulates.pm10", " ug/m3");
 
     const pressureUnit = this._getUnitForRoomField(room, "structural.pressure", " hPa");
     const vibrationUnit = this._getUnitForRoomField(room, "structural.vibration", " mm/s");
@@ -3511,7 +3511,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
               <div class="ai-group-row"><span class="ai-muted">VOC</span><span class="${this._getValueSeverity('air_quality.voc', airQuality.voc) === 'high' ? 'ai-value-high' : ''}">${this._displayValueWithUnit(airQuality.voc, vocUnit)}</span></div>
               <div class="ai-group-row"><span class="ai-muted">Formaldehyde</span><span>${this._displayValueWithUnit(airQuality.formaldehyde, formaldehydeUnit)}</span></div>
               <div class="ai-group-row"><span class="ai-muted">Ozone</span><span>${this._displayValueWithUnit(airQuality.ozone, ozoneUnit)}</span></div>
-              <div class="ai-group-row"><span class="ai-muted">NO₂</span><span>${this._displayValueWithUnit(airQuality.no2, no2Unit)}</span></div>
+              <div class="ai-group-row"><span class="ai-muted">NO2</span><span>${this._displayValueWithUnit(airQuality.no2, no2Unit)}</span></div>
             </div>
 
 
@@ -3544,7 +3544,7 @@ var DOCUMENT_TYPES = globalThis.__AI_DOCUMENT_TYPES || [
 
             <div class="ai-group-card">
               <div class="ai-group-title">Control Context</div>
-              <div class="ai-group-row"><span class="ai-muted">CO₂</span><span>${this._displayValueWithUnit(controlContext.co2, co2Unit)}</span></div>
+              <div class="ai-group-row"><span class="ai-muted">CO2</span><span>${this._displayValueWithUnit(controlContext.co2, co2Unit)}</span></div>
             </div>
 
             <div class="ai-group-card">
@@ -6612,20 +6612,20 @@ _getAssetEnvironmentDraft(assetId, attrs) {
   }
 
   _formatEnvironmentMetricValue(categoryKey, metricKey, value) {
-    if (value === null || value === undefined || value === "") return "—";
+    if (value === null || value === undefined || value === "") return "-";
 
     const unitDefaults = {
-      "climate.temperature": " °F",
+      "climate.temperature": " degF",
       "climate.humidity": " %",
-      "climate.dew_point": " °F",
+      "climate.dew_point": " degF",
       "light.lux": " lx",
       "light.uv": "",
       "air_quality.voc": " ppb",
       "air_quality.formaldehyde": " ppb",
       "air_quality.ozone": " ppb",
       "air_quality.no2": " ppb",
-      "particulates.pm2_5": " µg/m³",
-      "particulates.pm10": " µg/m³",
+      "particulates.pm2_5": " ug/m3",
+      "particulates.pm10": " ug/m3",
       "safety.leak": "",
       "structural.pressure": " hPa",
       "structural.vibration": " mm/s",
@@ -8515,10 +8515,33 @@ _getAssetTimelineItems(attrs) {
 
     if (entityId && this._hass?.states?.[entityId]) {
       const unit = this._hass.states[entityId].attributes?.unit_of_measurement;
-      if (unit) return unit;
+      if (unit) return this._normalizeDisplayText(unit);
     }
 
-    return fallbackUnit;
+    return this._normalizeDisplayText(fallbackUnit);
+  }
+
+  _normalizeDisplayText(value) {
+    const raw = String(value ?? "");
+    if (!raw) return raw;
+
+    return raw
+      .replaceAll("Â°F", "degF")
+      .replaceAll("°F", "degF")
+      .replaceAll("Âµg/mÂ³", "ug/m3")
+      .replaceAll("µg/m³", "ug/m3")
+      .replaceAll("COâ‚‚", "CO2")
+      .replaceAll("CO₂", "CO2")
+      .replaceAll("NOâ‚‚", "NO2")
+      .replaceAll("NO₂", "NO2")
+      .replaceAll("â€”", "-")
+      .replaceAll("—", "-")
+      .replaceAll("â€¢", " | ")
+      .replaceAll("•", " | ")
+      .replaceAll("â†’", "->")
+      .replaceAll("→", "->")
+      .replaceAll("â€¦", "...")
+      .replaceAll("…", "...");
   }
 
   _getAssetTypeOptions() {
@@ -8782,9 +8805,9 @@ _getAssetTimelineItems(attrs) {
   }
 
   _displayValue(value) {
-    if (value === null || value === undefined || value === "") return "—";
+    if (value === null || value === undefined || value === "") return "-";
     if (typeof value === "object") return this._escapeHtml(JSON.stringify(value));
-    return this._escapeHtml(String(value));
+    return this._escapeHtml(this._normalizeDisplayText(value));
   }
 
   _formatMeasurementElapsed(startedAt) {
@@ -8987,7 +9010,7 @@ _getAssetTimelineItems(attrs) {
   }
 
   _displayValueWithUnit(value, unit) {
-    if (value === null || value === undefined || value === "") return "—";
+    if (value === null || value === undefined || value === "") return "-";
     if (typeof value === "object") return this._escapeHtml(JSON.stringify(value));
 
     const num = Number(value);
@@ -9003,13 +9026,16 @@ _getAssetTimelineItems(attrs) {
         text = num.toFixed(2);
       }
     } else {
-      text = String(value).trim();
+      text = this._normalizeDisplayText(value).trim();
     }
 
-    if (!text) return "—";
+    if (!text) return "-";
 
-    const needsSpace = /^[a-zA-Zµ]/.test(unit);
-    const formatted = needsSpace ? `${text} ${unit}` : `${text}${unit}`;
+    const normalizedUnit = this._normalizeDisplayText(unit || "").trim();
+    const needsSpace = /^[a-zA-Z]/.test(normalizedUnit);
+    const formatted = normalizedUnit
+      ? (needsSpace ? `${text} ${normalizedUnit}` : `${text}${normalizedUnit}`)
+      : text;
 
     return this._escapeHtml(formatted);
   }
@@ -9090,7 +9116,7 @@ _getAssetTimelineItems(attrs) {
     const value = this._getCurrentRoomMetricValue(roomEntity, fieldPath);
 
     if (value === null || value === undefined || value === "") {
-      return "—";
+      return "-";
     }
 
     if (typeof value === "boolean") {
@@ -9098,16 +9124,16 @@ _getAssetTimelineItems(attrs) {
     }
 
     const unitDefaults = {
-      "climate.temperature": " °F",
+      "climate.temperature": " degF",
       "climate.humidity": " %",
-      "climate.dew_point": " °F",
+      "climate.dew_point": " degF",
       "light.lux": " lx",
       "air_quality.voc": " ppb",
       "air_quality.formaldehyde": " ppb",
       "air_quality.ozone": " ppb",
       "air_quality.no2": " ppb",
-      "particulates.pm2_5": " µg/m³",
-      "particulates.pm10": " µg/m³",
+      "particulates.pm2_5": " ug/m3",
+      "particulates.pm10": " ug/m3",
       "structural.pressure": " hPa",
       "structural.vibration": " mm/s",
       "context.noise": " dB",
