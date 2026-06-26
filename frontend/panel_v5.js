@@ -1459,26 +1459,41 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const runningPanel = String(AI_PANEL_BUILD?.selected_panel || "");
     const runningToken = String(AI_PANEL_BUILD?.cache_token || "");
 
-    if (!runningPanel || !runningToken || typeof fetch !== "function") {
+    if (!runningPanel || !runningToken) {
       return this._panelVersionStatus;
     }
 
     try {
-      const response = await fetch("/api/asset_intelligence/panel_version", {
-        method: "GET",
-        cache: "no-store",
-        credentials: "same-origin",
-        headers: {
+      let payload = null;
+
+      if (typeof this._hass?.callApi === "function") {
+        payload = await this._hass.callApi("get", "asset_intelligence/panel_version");
+      } else if (typeof fetch === "function") {
+        const token = this._hass?.auth?.data?.access_token || "";
+        const headers = {
           Accept: "application/json",
           "Cache-Control": "no-cache",
-        },
-      });
+        };
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        const response = await fetch("/api/asset_intelligence/panel_version", {
+          method: "GET",
+          cache: "no-store",
+          credentials: "same-origin",
+          headers,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        payload = await response.json();
+      } else {
+        return this._panelVersionStatus;
       }
 
-      const payload = await response.json();
       const latestPanel = String(payload?.selected_panel || "");
       const latestToken = String(payload?.cache_token || "");
       const stale = !!latestPanel && !!latestToken && (
@@ -12132,6 +12147,26 @@ _getAssetTimelineItems(attrs) {
     `;
 
     document.body.appendChild(dialog);
+
+    // Pre-bind hass for HA pickers immediately after mount so first render
+    // does not occur with undefined localization context.
+    try {
+      const preAreaPicker = dialog.querySelector("#ai-asset-area");
+      if (preAreaPicker) {
+        preAreaPicker.hass = this._hass;
+      }
+    } catch (e) {}
+
+    try {
+      const preLabelPicker = dialog.querySelector("#ai-asset-labels");
+      if (preLabelPicker) {
+        preLabelPicker.hass = this._hass;
+        preLabelPicker._labels = this._labelRegistry || [];
+        preLabelPicker.value = [...defaultLabelIds];
+      }
+    } catch (e) {}
+
+    this._applyLabelRegistryToPickers(dialog);
 
     setTimeout(() => {
       const nameInput = dialog.querySelector("#ai-asset-name");
