@@ -419,12 +419,22 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._draftWindows[roomId] = windows;
   }
 
+  _safeUnsubscribe(unsubFn) {
+    if (typeof unsubFn !== "function") return;
+    try {
+      const maybePromise = unsubFn();
+      if (maybePromise && typeof maybePromise.catch === "function") {
+        maybePromise.catch(() => {});
+      }
+    } catch (e) {}
+  }
+
   disconnectedCallback() {
     try { this._ai_mutation_observer?.disconnect(); } catch (e) {}
     if (super.disconnectedCallback) super.disconnectedCallback();
-    try { if (this._docStorageEventUnsub) this._docStorageEventUnsub(); } catch (e) {}
+    this._safeUnsubscribe(this._docStorageEventUnsub);
     this._docStorageEventUnsub = null;
-    try { if (this._labelRegistryEventUnsub) this._labelRegistryEventUnsub(); } catch (e) {}
+    this._safeUnsubscribe(this._labelRegistryEventUnsub);
     this._labelRegistryEventUnsub = null;
     this._subscribedConnection = null;
     try {
@@ -489,12 +499,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         && typeof connection.subscribeEvents === "function"
       ) {
         if (this._docStorageEventUnsub) {
-          try { this._docStorageEventUnsub(); } catch (e) {}
+          this._safeUnsubscribe(this._docStorageEventUnsub);
           this._docStorageEventUnsub = null;
         }
 
         if (this._labelRegistryEventUnsub) {
-          try { this._labelRegistryEventUnsub(); } catch (e) {}
+          this._safeUnsubscribe(this._labelRegistryEventUnsub);
           this._labelRegistryEventUnsub = null;
         }
 
@@ -1342,12 +1352,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       this._loadError = null;
       this._assetHistoryCache = {};
       this._assetHistoryLoading = {};
-
-      if (!this._labelRegistryEventUnsub && this._hass?.connection) {
-        this._labelRegistryEventUnsub = this._hass.connection.subscribeEvents(() => {
-          this._refreshLabelRegistry();
-        }, "label_registry_updated");
-      }
 
       this._refreshLabelRegistry();
       await this._refreshDocumentStorageState(false);
