@@ -1328,7 +1328,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         this._roomConfig = snapshot?.rooms || {};
         this._systemDefaults = snapshot?.system_defaults || {};
 
-        console.log("ROOM CONFIG LOADED", this._roomConfig);
 
       } catch (storageError) {
         console.warn("Room config storage load failed", storageError);
@@ -4441,7 +4440,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const assetId = this._view.assetId;
     const asset = this._getAssetEntities().find((a) => a.attributes?.asset_id === assetId);
     if (!asset) return;
-    console.log("INIT ASSET DETAIL PICKERS:", assetId);
     const attrs = asset.attributes || {};
     const draft = this._assetInfoDrafts[assetId] || {};
     const deviceMeta = this._getDeviceMetadataForAsset(assetId, attrs, asset.entity_id);
@@ -4485,7 +4483,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     // âœ… Restore draft values into normal input/select/textarea fields
     // --------------------------------------------------
     const watchedFields = this.querySelectorAll("[data-asset-info-watch][data-asset-field]");
-    console.log("WATCHED FIELDS FOUND:", watchedFields.length);
 
     watchedFields.forEach((el) => {
       const fieldName = el.getAttribute("data-asset-field");
@@ -4506,7 +4503,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         this._assetInfoDrafts[assetId][fieldName] = e.target.value;
 
         // âœ… DEBUG: prove draft is capturing
-        console.log("DRAFT UPDATE:", assetId, fieldName, e.target.value);
 
         this._refreshAssetInfoSaveState();
       };
@@ -8178,7 +8174,6 @@ _getAssetTimelineItems(attrs) {
   =========================== */
 
   _attachNavigationHandlers() {
-    console.log("ATTACH HANDLERS RUN");
 
     // Room click
     this.querySelectorAll(".ai-room-click").forEach((el) => {
@@ -8214,7 +8209,6 @@ _getAssetTimelineItems(attrs) {
         const roomId = el.getAttribute("data-room-config");
         if (!roomId) return;
 
-        console.log("ROOM CONFIG CLICK", roomId);
 
         this._attemptNavigate({ type: "room-config", roomId });
       };
@@ -12291,15 +12285,6 @@ _getAssetTimelineItems(attrs) {
           duplicateName ? "An asset with this name already exists" : ""
         );
 
-        // Optional but very helpful while testing
-        console.log("Add Asset validation", {
-          rawName,
-          selectedType,
-          hasName,
-          hasType,
-          duplicateName,
-          disabled: saveBtn.disabled
-        });
       };
 
       // Name binding
