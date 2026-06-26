@@ -123,6 +123,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._subscribedConnection = null;
     this._renderDebounceTimer = null;
     this._renderQueued = false;
+    this._loadingPromise = null;
     this._suppressAssetPickerDraftWrites = false;
     this._measurementActionInFlight = {};
     this._measurementPendingState = {};
@@ -469,7 +470,12 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     }
 
     if (!this._loaded) {
-      this._load();
+      this._renderStartupLoading();
+      if (!this._loadingPromise) {
+        this._loadingPromise = this._load().finally(() => {
+          this._loadingPromise = null;
+        });
+      }
       return;
     }
 
@@ -1275,21 +1281,17 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       // --------------------------------------------------
       // Core registries (unchanged)
       // --------------------------------------------------
-      this._areas = await this._hass.callWS({
-        type: "config/area_registry/list",
-      });
+      const [areas, floors, entities, devices] = await Promise.all([
+        this._hass.callWS({ type: "config/area_registry/list" }),
+        this._hass.callWS({ type: "config/floor_registry/list" }),
+        this._hass.callWS({ type: "config/entity_registry/list" }),
+        this._hass.callWS({ type: "config/device_registry/list" }),
+      ]);
 
-      this._floors = await this._hass.callWS({
-        type: "config/floor_registry/list",
-      });
-
-      this._entityRegistry = await this._hass.callWS({
-        type: "config/entity_registry/list",
-      });
-
-      this._deviceRegistry = await this._hass.callWS({
-        type: "config/device_registry/list",
-      });
+      this._areas = Array.isArray(areas) ? areas : [];
+      this._floors = Array.isArray(floors) ? floors : [];
+      this._entityRegistry = Array.isArray(entities) ? entities : [];
+      this._deviceRegistry = Array.isArray(devices) ? devices : [];
 
       // --------------------------------------------------
       // âœ… TEMPORARY: Load persisted Room Configuration
@@ -1336,6 +1338,75 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     }
 
     this._render();
+  }
+
+  _renderStartupLoading() {
+    this.innerHTML = `
+      <style>
+        .ai-startup-wrap {
+          min-height: 60vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+          box-sizing: border-box;
+        }
+
+        .ai-startup-card {
+          width: min(760px, 100%);
+          border-radius: 16px;
+          border: 1px solid rgba(30, 136, 229, 0.28);
+          background: linear-gradient(180deg, rgba(227, 242, 253, 0.95) 0%, rgba(241, 248, 255, 0.95) 100%);
+          padding: 20px;
+          box-shadow: 0 8px 22px rgba(13, 71, 161, 0.12);
+        }
+
+        .ai-startup-title {
+          font-size: 16px;
+          font-weight: 700;
+          color: #0d47a1;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 6px;
+        }
+
+        .ai-startup-copy {
+          font-size: 13px;
+          color: #1e3a5f;
+          margin-bottom: 14px;
+        }
+
+        .ai-startup-bar {
+          height: 8px;
+          border-radius: 999px;
+          overflow: hidden;
+          background: rgba(30, 136, 229, 0.2);
+        }
+
+        .ai-startup-bar > span {
+          display: block;
+          width: 38%;
+          height: 100%;
+          border-radius: inherit;
+          background: linear-gradient(90deg, #42a5f5 0%, #1e88e5 100%);
+          animation: ai-startup-slide 1.2s ease-in-out infinite;
+        }
+
+        @keyframes ai-startup-slide {
+          0% { transform: translateX(-120%); }
+          100% { transform: translateX(320%); }
+        }
+      </style>
+
+      <div class="ai-startup-wrap">
+        <div class="ai-startup-card">
+          <div class="ai-startup-title"><ha-icon icon="mdi:home-search"></ha-icon><span>Assembling all of your rooms</span></div>
+          <div class="ai-startup-copy">Loading room, device, and entity registries. In larger environments this can take a little longer on first render.</div>
+          <div class="ai-startup-bar"><span></span></div>
+        </div>
+      </div>
+    `;
   }
 
   async _refreshDocumentStorageState(shouldRender = true) {
@@ -12082,6 +12153,43 @@ _getAssetTimelineItems(attrs) {
       labelPicker.hass = this._hass;
       labelPicker._labels = this._labelRegistry || [];
       labelPicker.value = [...defaultLabelIds];
+
+      const syncDialogDefaultLabels = async () => {
+        if (this._assetDraft?.labels_touched) return;
+
+        let desired = Array.isArray(this._assetDraft?.label_ids)
+          ? this._assetDraft.label_ids.map((labelId) => String(labelId || "").trim()).filter((labelId) => !!labelId)
+          : [];
+
+        if (!desired.length) {
+          desired = this._getDefaultLabelIds();
+        }
+
+        if (!desired.length) {
+          try {
+            const storage = await this._hass.callWS({
+              type: "homeassistant_storage/get",
+              key: "asset_intelligence.storage",
+            });
+            const fromStorage = Array.isArray(storage?.data?.system_defaults?.default_label_ids)
+              ? storage.data.system_defaults.default_label_ids
+              : [];
+            desired = fromStorage
+              .map((labelId) => String(labelId || "").trim())
+              .filter((labelId) => !!labelId);
+            if (desired.length) {
+              this._systemDefaults = storage?.data?.system_defaults || this._systemDefaults || {};
+            }
+          } catch (err) {}
+        }
+
+        if (!desired.length) return;
+
+        this._assetDraft.label_ids = [...desired];
+        this._syncMultiLabelPickerValue(labelPicker, desired);
+        this._applyLabelRegistryToPickers(dialog);
+      };
+
       Promise.allSettled([
         window.customElements?.whenDefined?.("ha-labels-picker"),
         window.customElements?.whenDefined?.("ha-label-picker"),
@@ -12090,7 +12198,11 @@ _getAssetTimelineItems(attrs) {
         try { labelPicker._labels = this._labelRegistry || []; } catch (e) {}
         this._syncMultiLabelPickerValue(labelPicker, defaultLabelIds);
         this._applyLabelRegistryToPickers(dialog);
+        syncDialogDefaultLabels();
       });
+      setTimeout(() => {
+        syncDialogDefaultLabels();
+      }, 300);
 
       // Default room
       areaPicker.value = roomId;

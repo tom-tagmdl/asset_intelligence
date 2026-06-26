@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
   "loggers": ["custom_components.asset_intelligence"],
   "requirements": [],
-  "version": "1.0.3"
+  "version": "1.0.4"
 }
