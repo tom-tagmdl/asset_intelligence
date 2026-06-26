@@ -808,6 +808,31 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     return [];
   }
 
+  async _fetchStorageSnapshot() {
+    if (!this._hass) {
+      return { rooms: {}, system_defaults: {} };
+    }
+
+    if (typeof this._hass.callApi === "function") {
+      try {
+        const payload = await this._hass.callApi("get", "asset_intelligence/storage_snapshot");
+        if (payload && typeof payload === "object") {
+          return {
+            rooms: payload.rooms && typeof payload.rooms === "object" ? payload.rooms : {},
+            system_defaults:
+              payload.system_defaults && typeof payload.system_defaults === "object"
+                ? payload.system_defaults
+                : {},
+          };
+        }
+      } catch (err) {
+        console.warn("Asset Intelligence storage snapshot API unavailable", err);
+      }
+    }
+
+    return { rooms: {}, system_defaults: {} };
+  }
+
   _handleShowDialogEvent(event) {
     const detail = event?.detail || {};
     if (detail.dialogTag !== "dialog-label-detail") {
@@ -1298,13 +1323,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       // (matches storage.py system-of-record)
       // --------------------------------------------------
       try {
-        const storage = await this._hass.callWS({
-          type: "homeassistant_storage/get",
-          key: "asset_intelligence.storage",
-        });
+        const snapshot = await this._fetchStorageSnapshot();
 
-        this._roomConfig = storage?.data?.rooms || {};
-        this._systemDefaults = storage?.data?.system_defaults || {};
+        this._roomConfig = snapshot?.rooms || {};
+        this._systemDefaults = snapshot?.system_defaults || {};
 
         console.log("ROOM CONFIG LOADED", this._roomConfig);
 
@@ -12202,18 +12224,15 @@ _getAssetTimelineItems(attrs) {
 
         if (!desired.length) {
           try {
-            const storage = await this._hass.callWS({
-              type: "homeassistant_storage/get",
-              key: "asset_intelligence.storage",
-            });
-            const fromStorage = Array.isArray(storage?.data?.system_defaults?.default_label_ids)
-              ? storage.data.system_defaults.default_label_ids
+            const snapshot = await this._fetchStorageSnapshot();
+            const fromStorage = Array.isArray(snapshot?.system_defaults?.default_label_ids)
+              ? snapshot.system_defaults.default_label_ids
               : [];
             desired = fromStorage
               .map((labelId) => String(labelId || "").trim())
               .filter((labelId) => !!labelId);
             if (desired.length) {
-              this._systemDefaults = storage?.data?.system_defaults || this._systemDefaults || {};
+              this._systemDefaults = snapshot?.system_defaults || this._systemDefaults || {};
             }
           } catch (err) {}
         }

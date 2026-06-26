@@ -14,6 +14,7 @@ _LOGGER = logging.getLogger(__name__)
 _PANEL_REGISTERED_FLAG = "_panel_registered"
 _STATIC_REGISTERED_FLAG = "_panel_static_registered"
 _VERSION_VIEW_REGISTERED_FLAG = "_panel_version_view_registered"
+_SNAPSHOT_VIEW_REGISTERED_FLAG = "_panel_snapshot_view_registered"
 _PANEL_BUILD_INFO_KEY = "_panel_build_info"
 
 
@@ -33,6 +34,51 @@ class AssetIntelligencePanelVersionView(HomeAssistantView):
             raise web.HTTPServiceUnavailable(text="Panel build info unavailable")
 
         response = web.json_response(build_info)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+
+class AssetIntelligenceStorageSnapshotView(HomeAssistantView):
+    """Expose runtime storage snapshot for frontend bootstrap in production-safe way."""
+
+    url = "/api/asset_intelligence/storage_snapshot"
+    name = "api:asset_intelligence:storage_snapshot"
+    requires_auth = True
+
+    async def get(self, request):
+        hass = request.app["hass"]
+
+        rooms = {}
+        system_defaults = {}
+
+        try:
+            entries = hass.config_entries.async_entries(DOMAIN)
+            for entry in entries:
+                runtime = getattr(entry, "runtime_data", None)
+                if not isinstance(runtime, dict):
+                    continue
+
+                store = runtime.get("store")
+                if store is None:
+                    continue
+
+                maybe_rooms = getattr(store, "rooms", {}) or {}
+                maybe_defaults = getattr(store, "system_defaults", {}) or {}
+
+                if isinstance(maybe_rooms, dict):
+                    rooms = maybe_rooms
+                if isinstance(maybe_defaults, dict):
+                    system_defaults = maybe_defaults
+                break
+        except Exception:
+            _LOGGER.exception("Asset Intelligence: failed building storage snapshot")
+
+        response = web.json_response(
+            {
+                "rooms": rooms,
+                "system_defaults": system_defaults,
+            }
+        )
         response.headers["Cache-Control"] = "no-store"
         return response
 
@@ -95,6 +141,14 @@ async def async_setup_panel(hass):
             domain_data[_VERSION_VIEW_REGISTERED_FLAG] = True
         except Exception:
             _LOGGER.exception("Asset Intelligence: failed registering panel version view")
+            return
+
+    if not domain_data.get(_SNAPSHOT_VIEW_REGISTERED_FLAG):
+        try:
+            hass.http.register_view(AssetIntelligenceStorageSnapshotView())
+            domain_data[_SNAPSHOT_VIEW_REGISTERED_FLAG] = True
+        except Exception:
+            _LOGGER.exception("Asset Intelligence: failed registering panel snapshot view")
             return
 
     if domain_data.get(_PANEL_REGISTERED_FLAG):
