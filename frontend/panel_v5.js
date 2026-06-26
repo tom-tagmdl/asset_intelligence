@@ -617,11 +617,17 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
   _applyHassToHAElements() {
     if (!this._hass) return;
 
-    const elements = this.querySelectorAll(
-      "ha-area-picker, ha-labels-picker, ha-selector, ha-icon-picker, ha-entity-picker"
-    );
+    const roots = [this];
+    if (document.body && document.body !== this) {
+      roots.push(document.body);
+    }
 
-    elements.forEach((el) => {
+    roots.forEach((root) => {
+      const elements = root.querySelectorAll(
+        "ha-area-picker, ha-labels-picker, ha-selector, ha-icon-picker, ha-entity-picker"
+      );
+
+      elements.forEach((el) => {
       if (!el) return;
       if (el.hass !== this._hass) {
         try { el.hass = this._hass; } catch (e) {}
@@ -637,6 +643,13 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       if ((tag === "ha-area-picker" || tag === "ha-entity-picker") && (el.value === undefined || el.value === null)) {
         try { el.value = ""; } catch (e) {}
       }
+
+        if (tag === "ha-labels-picker") {
+          const desiredValues = this._getDesiredLabelPickerValues(el);
+          if (desiredValues.length) {
+            this._syncMultiLabelPickerValue(el, desiredValues);
+          }
+        }
 
       if (tag === "ha-entity-picker" && el.dataset.metric && this._view?.type === "room-config") {
         const fieldPath = el.dataset.metric;
@@ -657,9 +670,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       if (typeof el.requestUpdate === "function") {
         try { el.requestUpdate(); } catch (e) {}
       }
-    });
+      });
 
-    this._applyLabelRegistryToPickers();
+      this._applyLabelRegistryToPickers(root);
+    });
   }
 
   async _refreshLabelRegistry() {
@@ -12068,6 +12082,15 @@ _getAssetTimelineItems(attrs) {
       labelPicker.hass = this._hass;
       labelPicker._labels = this._labelRegistry || [];
       labelPicker.value = [...defaultLabelIds];
+      Promise.allSettled([
+        window.customElements?.whenDefined?.("ha-labels-picker"),
+        window.customElements?.whenDefined?.("ha-label-picker"),
+      ]).then(() => {
+        try { labelPicker.hass = this._hass; } catch (e) {}
+        try { labelPicker._labels = this._labelRegistry || []; } catch (e) {}
+        this._syncMultiLabelPickerValue(labelPicker, defaultLabelIds);
+        this._applyLabelRegistryToPickers(dialog);
+      });
 
       // Default room
       areaPicker.value = roomId;
