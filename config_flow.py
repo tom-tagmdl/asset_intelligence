@@ -60,6 +60,17 @@ def _normalize_settings_input(user_input: SettingsDict) -> tuple[SettingsDict, d
     return normalized_input, errors
 
 
+def _merge_settings_input(existing: SettingsDict, updates: SettingsDict) -> SettingsDict:
+    """Merge submitted settings onto existing values.
+
+    Home Assistant option forms may omit untouched suggested text values from the
+    submitted payload. Preserve the previously saved storage path in that case.
+    """
+    merged: SettingsDict = dict(existing or {})
+    merged.update(dict(updates or {}))
+    return merged
+
+
 def _build_settings_schema(
     options: SettingsDict,
     user_input: SettingsDict | None = None,
@@ -128,7 +139,8 @@ class AssetIntelligenceConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         options = reconfigure_entry.options or {}
 
         if user_input is not None:
-            normalized_input, errors = _normalize_settings_input(user_input)
+            merged_input = _merge_settings_input(options, user_input)
+            normalized_input, errors = _normalize_settings_input(merged_input)
             if not errors:
                 await self.async_set_unique_id(DOMAIN)
                 self._abort_if_unique_id_mismatch()
@@ -186,7 +198,8 @@ class AssetIntelligenceOptionsFlow(config_entries.OptionsFlow):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            normalized_input, errors = _normalize_settings_input(user_input)
+            merged_input = _merge_settings_input(options, user_input)
+            normalized_input, errors = _normalize_settings_input(merged_input)
             if not errors:
                 return self.async_create_entry(title="", data=normalized_input)
 

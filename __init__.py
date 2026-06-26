@@ -62,6 +62,7 @@ REGISTERED_SERVICES: tuple[str, ...] = (
     "delete_document",
     "get_document_info",
     "check_document_availability",
+    "check_stored_document_availability",
     "get_asset_history",
     "add_physical_document_location",
     "set_environment_requirements",
@@ -1756,7 +1757,13 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         # Also fire a specific availability event so UI can react
         hass.bus.async_fire(
             f"{DOMAIN}_document_storage_availability_changed",
-            {"available": available, "readable": readable, "actor": actor},
+            {
+                "available": available,
+                "readable": readable,
+                "documents_enabled": documents_enabled,
+                "provider": provider,
+                "actor": actor,
+            },
         )
 
         # Trigger coordinator refresh so other entities see updated storage config
@@ -2468,7 +2475,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     # -----------------------------
     # CHECK DOCUMENT AVAILABILITY
     # -----------------------------
-    async def handle_check_document_availability(call: ServiceCall) -> Dict[str, Any]:
+    async def handle_check_stored_document_availability(call: ServiceCall) -> Dict[str, Any]:
         store = _get_store(hass)
         document_storage = _get_document_storage(hass)
         actor = await _resolve_actor(hass, call)
@@ -3549,8 +3556,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
-        "check_document_availability",
-        handle_check_document_availability,
+        "check_stored_document_availability",
+        handle_check_stored_document_availability,
         supports_response=SupportsResponse.ONLY,
     )
     hass.services.async_register(
@@ -3810,7 +3817,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 )
                 hass.bus.async_fire(
                     f"{DOMAIN}_document_storage_availability_changed",
-                    {"available": available},
+                    {
+                        "available": available,
+                        "readable": available,
+                        "documents_enabled": bool(config.get("documents_enabled", False)),
+                        "provider": config.get("provider"),
+                    },
                 )
                 async_dispatcher_send(hass, SIGNAL_ASSETS_UPDATED)
 

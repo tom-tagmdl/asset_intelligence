@@ -115,6 +115,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._measurementTicker = null;
     this._assetDetailInteractionActive = false;
     this._assetDetailInteractionTimer = null;
+    this._openAssetOverflowId = null;
     this._roomConfigInteractionActive = false;
     this._roomConfigInteractionTimer = null;
     // Γ£à Cache for authenticated protected image blob URLs
@@ -155,6 +156,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._docStorageEventUnsub = null;
     this._labelRegistryEventUnsub = null;
     this._documentStorageAvailable = null; // null = unknown, true/false = explicit
+    this._documentStorageReadable = null;
+    this._documentManagementEnabled = null;
     this._boundShowDialogHandler = this._handleShowDialogEvent.bind(this);
     this._boundBeforeUnloadHandler = this._handleBeforeUnload.bind(this);
   }
@@ -172,20 +175,55 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     if (this._roomConfigDelegationBound) return;
     this._roomConfigDelegationBound = true;
 
+    const roomConfigInteractionSelector = [
+      "[data-edit-metric]",
+      "[data-save-metric]",
+      "[data-cancel-metric]",
+      "[data-remove-metric]",
+      "[data-add-window]",
+      "[data-edit-window]",
+      "[data-save-window]",
+      "[data-cancel-window]",
+      "[data-remove-window]",
+      "[data-window-direction]",
+      "[data-window-exposure]",
+    ].join(",");
+
     // Set interaction guard on pointerdown so a pending hass update
     // can't replace the DOM between pointerdown and click.
     this.addEventListener("pointerdown", (e) => {
       if (this._view?.type !== "room-config") return;
-      const btn = e.target?.closest(
-        "[data-edit-metric],[data-save-metric],[data-cancel-metric],[data-remove-metric]"
-      );
+      const btn = e.target?.closest(roomConfigInteractionSelector);
       if (!btn) return;
-      this._roomConfigInteractionActive = true;
-      if (this._roomConfigInteractionTimer) clearTimeout(this._roomConfigInteractionTimer);
-      this._roomConfigInteractionTimer = setTimeout(() => {
-        this._roomConfigInteractionActive = false;
-        this._roomConfigInteractionTimer = null;
-      }, 800);
+      this._holdRoomConfigInteraction(btn.matches("[data-window-direction],[data-window-exposure]") ? 2500 : 1000);
+    }, true);
+
+    this.addEventListener("focusin", (e) => {
+      if (this._view?.type !== "room-config") return;
+      const select = e.target?.closest("[data-window-direction],[data-window-exposure]");
+      if (!select) return;
+      this._holdRoomConfigInteraction(2500);
+    }, true);
+
+    this.addEventListener("change", (e) => {
+      if (this._view?.type !== "room-config") return;
+
+      const directionSelect = e.target?.closest("[data-window-direction]");
+      if (directionSelect) {
+        e.stopPropagation();
+        const index = Number(directionSelect.getAttribute("data-window-direction"));
+        this._stageWindowDraftValue(this._view?.roomId, index, "direction", e.target?.value || "");
+        this._holdRoomConfigInteraction(800);
+        return;
+      }
+
+      const exposureSelect = e.target?.closest("[data-window-exposure]");
+      if (exposureSelect) {
+        e.stopPropagation();
+        const index = Number(exposureSelect.getAttribute("data-window-exposure"));
+        this._stageWindowDraftValue(this._view?.roomId, index, "exposure", e.target?.value || "");
+        this._holdRoomConfigInteraction(800);
+      }
     }, true);
 
     this.addEventListener("click", (e) => {
@@ -255,7 +293,126 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         this._render();
         return;
       }
+
+      const addWindowBtn = e.target?.closest("[data-add-window]");
+      if (addWindowBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === this._view.roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(this._view.roomId, room);
+        windows.push({ direction: "", exposure: "" });
+
+        this._draftWindows[this._view.roomId] = windows;
+        this._editingWindowIndex = windows.length - 1;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const editWindowBtn = e.target?.closest("[data-edit-window]");
+      if (editWindowBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._editingWindowIndex = Number(editWindowBtn.getAttribute("data-edit-window"));
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const cancelWindowBtn = e.target?.closest("[data-cancel-window]");
+      if (cancelWindowBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const removeWindowBtn = e.target?.closest("[data-remove-window]");
+      if (removeWindowBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const index = Number(removeWindowBtn.getAttribute("data-remove-window"));
+        if (!confirm("Remove this window?")) return;
+
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === this._view.roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(this._view.roomId, room);
+        windows.splice(index, 1);
+
+        this._draftWindows[this._view.roomId] = windows;
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
+
+      const saveWindowBtn = e.target?.closest("[data-save-window]");
+      if (saveWindowBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const index = Number(saveWindowBtn.getAttribute("data-save-window"));
+        const roomId = this._view.roomId;
+        const room = this._getRoomEntities().find(
+          (r) => r.attributes?.area_id === roomId
+        );
+        if (!room) return;
+
+        const windows = this._getDraftWindows(roomId, room);
+        const draftWindow = windows[index] || { direction: "", exposure: "" };
+
+        if (!draftWindow.direction || !draftWindow.exposure) {
+          alert("Select both direction and exposure");
+          this._holdRoomConfigInteraction(1200);
+          return;
+        }
+
+        this._draftWindows[roomId] = windows;
+        this._editingWindowIndex = null;
+        this._roomConfigInteractionActive = false;
+        this._render();
+        return;
+      }
     }, true);
+  }
+
+  _holdRoomConfigInteraction(delay = 1000) {
+    this._roomConfigInteractionActive = true;
+    if (this._roomConfigInteractionTimer) {
+      clearTimeout(this._roomConfigInteractionTimer);
+    }
+    this._roomConfigInteractionTimer = setTimeout(() => {
+      this._roomConfigInteractionActive = false;
+      this._roomConfigInteractionTimer = null;
+    }, delay);
+  }
+
+  _stageWindowDraftValue(roomId, index, field, value) {
+    if (!roomId || !Number.isInteger(index) || index < 0 || !field) return;
+
+    const room = this._getRoomEntities().find(
+      (entry) => entry.attributes?.area_id === roomId
+    );
+    if (!room) return;
+
+    const windows = this._getDraftWindows(roomId, room);
+    if (!windows[index]) {
+      windows[index] = { direction: "", exposure: "" };
+    }
+
+    windows[index][field] = value || "";
+    this._draftWindows[roomId] = windows;
   }
 
   disconnectedCallback() {
@@ -335,10 +492,18 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         this._docStorageEventUnsub = connection.subscribeEvents((event) => {
           try {
             const avail = event?.data?.available;
+            const readable = event?.data?.readable;
+            const enabled = event?.data?.documents_enabled;
             if (typeof avail === "boolean") {
               this._documentStorageAvailable = avail;
             }
-            this._scheduleRender(0);
+            if (typeof readable === "boolean") {
+              this._documentStorageReadable = readable;
+            }
+            if (typeof enabled === "boolean") {
+              this._documentManagementEnabled = enabled;
+            }
+            this._refreshDocumentStorageState();
           } catch (e) {}
         }, "asset_intelligence_document_storage_availability_changed");
 
@@ -1124,6 +1289,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       }
 
       this._refreshLabelRegistry();
+      await this._refreshDocumentStorageState(false);
       this._maybeCheckPanelVersion(true);
 
     } catch (e) {
@@ -1132,6 +1298,34 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     }
 
     this._render();
+  }
+
+  async _refreshDocumentStorageState(shouldRender = true) {
+    if (!this._hass) return;
+
+    try {
+      const response = await this._callServiceWithResponse(
+        "asset_intelligence",
+        "check_document_availability",
+        {}
+      );
+
+      if (typeof response?.available === "boolean") {
+        this._documentStorageAvailable = response.available;
+      }
+      if (typeof response?.readable === "boolean") {
+        this._documentStorageReadable = response.readable;
+      }
+      if (typeof response?.documents_enabled === "boolean") {
+        this._documentManagementEnabled = response.documents_enabled;
+      }
+    } catch (err) {
+      console.warn("Asset Intelligence document storage refresh failed", err);
+    }
+
+    if (shouldRender) {
+      this._scheduleRender(0);
+    }
   }
 
   _maybeCheckPanelVersion(force = false) {
@@ -1251,16 +1445,19 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     if (typeof this._documentStorageAvailable === "boolean") {
       documentStorageAvailable = this._documentStorageAvailable;
     }
+    if (typeof this._documentManagementEnabled === "boolean") {
+      documentManagementEnabled = this._documentManagementEnabled;
+    }
 
     try {
       const bin = this._hass?.states?.["binary_sensor.asset_intelligence_document_storage_available"];
       if (bin) {
-        if (typeof bin.state === "string") {
+        if (documentStorageAvailable === null && typeof bin.state === "string") {
           documentStorageAvailable = bin.state === "on";
         }
 
         const enabledAttr = bin.attributes?.documents_enabled;
-        if (typeof enabledAttr === "boolean") {
+        if (documentManagementEnabled === null && typeof enabledAttr === "boolean") {
           documentManagementEnabled = enabledAttr;
         }
       }
@@ -4143,7 +4340,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     const isEditableControl = (target) => {
       if (!(target instanceof HTMLElement)) return false;
       return !!target.closest(
-        "input, select, textarea, ha-entity-picker, ha-area-picker, ha-labels-picker, ha-selector, .ai-form-control"
+        "input, select, textarea, ha-entity-picker, ha-area-picker, ha-labels-picker, ha-selector, .ai-form-control, .ai-overflow, .ai-measurement-pill, .ai-measurement-stop"
       );
     };
 
@@ -4214,7 +4411,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
             "ha-labels-picker, ha-label-picker, ha-area-picker, ha-entity-picker, ha-selector"
           );
           if (pickerAncestor && isInsideShell(pickerAncestor)) return;
+          if (active.closest("[data-asset-overflow].open")) return;
         }
+
+        if (this._openAssetOverflowId) return;
 
         this._assetDetailInteractionActive = false;
       }, delay);
@@ -5799,7 +5999,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                 </button>
               </div>
               <div
-                class="ai-overflow"
+                class="ai-overflow ${this._openAssetOverflowId === assetId ? "open" : ""}"
                 data-asset-overflow="${this._escapeHtml(assetId)}"
               >
                 <button class="ai-overflow-button" type="button" title="More actions" aria-label="More actions">
@@ -7745,11 +7945,14 @@ _getAssetTimelineItems(attrs) {
         button.onclick = (e) => {
           e.preventDefault();
           e.stopPropagation();
+          this._assetDetailInteractionActive = true;
           const shouldOpen = !wrap.classList.contains("open");
+          const assetId = wrap.getAttribute("data-asset-overflow") || null;
           this.querySelectorAll("[data-asset-overflow].open").forEach((otherWrap) => {
             if (otherWrap !== wrap) otherWrap.classList.remove("open");
           });
           wrap.classList.toggle("open", shouldOpen);
+          this._openAssetOverflowId = shouldOpen ? assetId : null;
         };
       }
 
@@ -7758,6 +7961,7 @@ _getAssetTimelineItems(attrs) {
         item.addEventListener("click", (e) => {
           e.stopPropagation();
           wrap.classList.remove("open");
+          this._openAssetOverflowId = null;
         });
         item.dataset.overflowCloseBound = "true";
       });
@@ -7771,6 +7975,7 @@ _getAssetTimelineItems(attrs) {
         this.querySelectorAll("[data-asset-overflow].open").forEach((wrap) => {
           wrap.classList.remove("open");
         });
+        this._openAssetOverflowId = null;
       });
       this._assetOverflowDocBound = true;
     }
@@ -10439,7 +10644,7 @@ _getAssetTimelineItems(attrs) {
     }
 
     try {
-      const response = await this._callServiceWithResponse("asset_intelligence", "check_document_availability", {
+      const response = await this._callServiceWithResponse("asset_intelligence", "check_stored_document_availability", {
         asset_id: assetId,
         document_id: documentId,
       });

@@ -53,7 +53,8 @@ In the integration options, configure:
 Notes:
 
 - Default labels are applied automatically to new assets.
-- If frontend updates are not immediately visible after an upgrade, perform a hard browser refresh.
+- The panel now prompts for a reload when a newer frontend bundle is detected after an upgrade.
+- If frontend updates still are not immediately visible after an upgrade, perform a hard browser refresh.
 
 ### My Home Assistant Link
 

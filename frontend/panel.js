@@ -105,6 +105,7 @@ class AssetIntelligenceApp extends HTMLElement {
     this._assetHistoryFilter = "all";
     this._assetHistoryCache = {};
     this._assetHistoryLoading = {};
+    this._openAssetOverflowId = null;
     this._panelVersionStatus = null;
     this._panelVersionDismissed = false;
     this._panelVersionCheckInFlight = null;
@@ -141,6 +142,8 @@ class AssetIntelligenceApp extends HTMLElement {
     this._docStorageEventUnsub = null;
     this._labelRegistryEventUnsub = null;
     this._documentStorageAvailable = null; // null = unknown, true/false = explicit
+    this._documentStorageReadable = null;
+    this._documentManagementEnabled = null;
     this._boundShowDialogHandler = this._handleShowDialogEvent.bind(this);
     this._boundBeforeUnloadHandler = this._handleBeforeUnload.bind(this);
   }
@@ -203,10 +206,18 @@ class AssetIntelligenceApp extends HTMLElement {
         this._docStorageEventUnsub = this._hass.connection.subscribeEvents((event) => {
           try {
             const avail = event?.data?.available;
+            const readable = event?.data?.readable;
+            const enabled = event?.data?.documents_enabled;
             if (typeof avail === "boolean") {
               this._documentStorageAvailable = avail;
             }
-            this._render();
+            if (typeof readable === "boolean") {
+              this._documentStorageReadable = readable;
+            }
+            if (typeof enabled === "boolean") {
+              this._documentManagementEnabled = enabled;
+            }
+            this._refreshDocumentStorageState();
           } catch (e) {}
         }, "asset_intelligence_document_storage_availability_changed");
 
@@ -226,6 +237,7 @@ class AssetIntelligenceApp extends HTMLElement {
       this._applyLabelRegistryToPickers();
     } else {
       this._refreshLabelRegistry();
+      await this._refreshDocumentStorageState(false);
     }
   }
 
@@ -939,6 +951,34 @@ class AssetIntelligenceApp extends HTMLElement {
     this._render();
   }
 
+  async _refreshDocumentStorageState(shouldRender = true) {
+    if (!this._hass) return;
+
+    try {
+      const response = await this._callServiceWithResponse(
+        "asset_intelligence",
+        "check_document_availability",
+        {}
+      );
+
+      if (typeof response?.available === "boolean") {
+        this._documentStorageAvailable = response.available;
+      }
+      if (typeof response?.readable === "boolean") {
+        this._documentStorageReadable = response.readable;
+      }
+      if (typeof response?.documents_enabled === "boolean") {
+        this._documentManagementEnabled = response.documents_enabled;
+      }
+    } catch (err) {
+      console.warn("Asset Intelligence document storage refresh failed", err);
+    }
+
+    if (shouldRender) {
+      this._render();
+    }
+  }
+
   _maybeCheckPanelVersion(force = false) {
     const now = Date.now();
 
@@ -1048,16 +1088,19 @@ class AssetIntelligenceApp extends HTMLElement {
     if (typeof this._documentStorageAvailable === "boolean") {
       documentStorageAvailable = this._documentStorageAvailable;
     }
+    if (typeof this._documentManagementEnabled === "boolean") {
+      documentManagementEnabled = this._documentManagementEnabled;
+    }
 
     try {
       const bin = this._hass?.states?.["binary_sensor.asset_intelligence_document_storage_available"];
       if (bin) {
-        if (typeof bin.state === "string") {
+        if (documentStorageAvailable === null && typeof bin.state === "string") {
           documentStorageAvailable = bin.state === "on";
         }
 
         const enabledAttr = bin.attributes?.documents_enabled;
-        if (typeof enabledAttr === "boolean") {
+        if (documentManagementEnabled === null && typeof enabledAttr === "boolean") {
           documentManagementEnabled = enabledAttr;
         }
       }
@@ -4776,7 +4819,7 @@ class AssetIntelligenceApp extends HTMLElement {
                 </button>
               </div>
               <div
-                class="ai-overflow"
+                class="ai-overflow ${this._openAssetOverflowId === assetId ? "open" : ""}"
                 data-asset-overflow="${this._escapeHtml(assetId)}"
               >
                 <button class="ai-overflow-button" type="button" title="More actions" aria-label="More actions">
@@ -6756,8 +6799,15 @@ _getAssetTimelineItems(attrs) {
       const button = wrap.querySelector(".ai-overflow-button");
       if (button) {
         button.onclick = (e) => {
+          e.preventDefault();
           e.stopPropagation();
-          wrap.classList.toggle("open");
+          const shouldOpen = !wrap.classList.contains("open");
+          const assetId = wrap.getAttribute("data-asset-overflow") || null;
+          this.querySelectorAll("[data-asset-overflow].open").forEach((otherWrap) => {
+            if (otherWrap !== wrap) otherWrap.classList.remove("open");
+          });
+          wrap.classList.toggle("open", shouldOpen);
+          this._openAssetOverflowId = shouldOpen ? assetId : null;
         };
       }
     });
@@ -9284,7 +9334,7 @@ _getAssetTimelineItems(attrs) {
     }
 
     try {
-      const response = await this._callServiceWithResponse("asset_intelligence", "check_document_availability", {
+      const response = await this._callServiceWithResponse("asset_intelligence", "check_stored_document_availability", {
         asset_id: assetId,
         document_id: documentId,
       });

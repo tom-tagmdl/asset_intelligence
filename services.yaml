@@ -414,7 +414,16 @@ get_document_info:
 
 check_document_availability:
   name: Check Document Availability
-  description: Check whether a stored document is currently available and accessible
+  description: Check whether document management is enabled and storage is currently available
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+check_stored_document_availability:
+  name: Check Stored Document Availability
+  description: Check whether a specific stored document is currently available and accessible
   fields:
     actor:
       name: Actor

@@ -104,3 +104,65 @@ async def test_async_step_reconfigure_updates_existing_entry(tmp_path):
     flow.async_set_unique_id.assert_awaited_once()
     flow._abort_if_unique_id_mismatch.assert_called_once()
     flow.async_update_reload_and_abort.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_async_step_reconfigure_preserves_existing_storage_path_when_omitted(tmp_path):
+    storage_path = tmp_path / "documents"
+    storage_path.mkdir()
+
+    flow = AssetIntelligenceConfigFlow()
+    flow.hass = SimpleNamespace()
+    flow._get_reconfigure_entry = MagicMock(
+        return_value=SimpleNamespace(
+            options={
+                "default_label_ids": [],
+                "document_storage_path": str(storage_path),
+                "documents_enabled": False,
+            },
+            title="Asset Intelligence",
+        )
+    )
+    flow.async_set_unique_id = AsyncMock()
+    flow._abort_if_unique_id_mismatch = MagicMock()
+    flow.async_update_reload_and_abort = MagicMock(
+        return_value={"type": "abort", "reason": "reconfigure_successful"}
+    )
+
+    result = await flow.async_step_reconfigure(
+        {
+            "default_label_ids": [],
+            "documents_enabled": True,
+        }
+    )
+
+    assert result["type"] == "abort"
+    _, kwargs = flow.async_update_reload_and_abort.call_args
+    assert kwargs["options_updates"]["document_storage_path"] == str(storage_path)
+    assert kwargs["options_updates"]["documents_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_options_flow_preserves_existing_storage_path_when_omitted(tmp_path):
+    storage_path = tmp_path / "documents"
+    storage_path.mkdir()
+
+    entry = SimpleNamespace(
+        options={
+            "default_label_ids": [],
+            "document_storage_path": str(storage_path),
+            "documents_enabled": False,
+        }
+    )
+    flow = AssetIntelligenceOptionsFlow(entry)
+
+    result = await flow.async_step_init(
+        {
+            "default_label_ids": [],
+            "documents_enabled": True,
+        }
+    )
+
+    assert result["type"] == "create_entry"
+    assert result["data"]["document_storage_path"] == str(storage_path)
+    assert result["data"]["documents_enabled"] is True
