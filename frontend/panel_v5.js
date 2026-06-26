@@ -1024,8 +1024,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         <div class="ai-label-dialog-error" id="ai-label-error" hidden></div>
 
         <div class="ai-label-dialog-actions">
-          <button type="button" class="ai-label-dialog-secondary-btn" id="ai-label-cancel">Cancel</button>
-          <button type="button" class="ai-label-dialog-primary-btn" id="ai-label-save">${isEdit ? "Save" : "Create Label"}</button>
+          <ha-button appearance="plain" id="ai-label-cancel">Cancel</ha-button>
+          <ha-button appearance="filled" id="ai-label-save">${isEdit ? "Save" : "Create Label"}</ha-button>
         </div>
       </div>
     `;
@@ -10253,12 +10253,12 @@ _getAssetTimelineItems(attrs) {
         </form>
 
         <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-custody-dialog-cancel>
+          <ha-button appearance="plain" data-custody-dialog-cancel>
             Cancel
-          </button>
-          <button class="ai-primary-button" type="button" data-custody-dialog-submit>
+          </ha-button>
+          <ha-button appearance="filled" data-custody-dialog-submit>
             ${this._escapeHtml(modeConfig.submitLabel)}
-          </button>
+          </ha-button>
         </div>
       </div>
     `;
@@ -10692,8 +10692,8 @@ _getAssetTimelineItems(attrs) {
           ${physicalFields}
         </form>
         <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-document-workflow-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</button>
+          <ha-button appearance="plain" data-document-workflow-cancel>Cancel</ha-button>
+          <ha-button appearance="filled" data-document-workflow-submit>${this._escapeHtml(submitLabel)}</ha-button>
         </div>
       </div>
     `;
@@ -10938,8 +10938,8 @@ _getAssetTimelineItems(attrs) {
         </div>
 
         <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-physical-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-physical-save>Save</button>
+          <ha-button appearance="plain" data-physical-cancel>Cancel</ha-button>
+          <ha-button appearance="filled" data-physical-save>Save</ha-button>
         </div>
       </div>
     `;
@@ -11233,8 +11233,8 @@ _getAssetTimelineItems(attrs) {
           ${editFields}
         </form>
         <div class="ai-dialog-actions">
-          <button class="ai-secondary-button" type="button" data-document-edit-cancel>Cancel</button>
-          <button class="ai-primary-button" type="button" data-document-edit-submit>${this._escapeHtml(submitLabel)}</button>
+          <ha-button appearance="plain" data-document-edit-cancel>Cancel</ha-button>
+          <ha-button appearance="filled" data-document-edit-submit>${this._escapeHtml(submitLabel)}</ha-button>
         </div>
       </div>
     `;
@@ -12155,13 +12155,9 @@ _getAssetTimelineItems(attrs) {
         </div>
 
         <div class="ai-dialog-actions">
-          <button type="button" id="ai-cancel" class="ai-dialog-secondary-btn">
-            Cancel
-          </button>
+          <ha-button appearance="plain" id="ai-cancel">Cancel</ha-button>
 
-          <button type="button" id="ai-save" class="ai-dialog-primary-btn" disabled>
-            Create Asset
-          </button>
+          <ha-button appearance="filled" id="ai-save" disabled>Create Asset</ha-button>
         </div>
       </div>
     `;
