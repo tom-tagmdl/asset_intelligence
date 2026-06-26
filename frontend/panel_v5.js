@@ -691,6 +691,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         Promise.resolve(picker.updateComplete)
           .catch(() => undefined)
           .then(() => {
+            const desiredValues = this._getDesiredLabelPickerValues(picker);
+            if (desiredValues.length) {
+              this._syncMultiLabelPickerValue(picker, desiredValues);
+            }
+
             const innerPicker = picker.labelPicker || picker.shadowRoot?.querySelector("ha-label-picker");
             if (!innerPicker) return;
 
@@ -703,6 +708,51 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           });
       }
     });
+  }
+
+  _getDesiredLabelPickerValues(picker) {
+    if (!picker || String(picker.tagName || "").toLowerCase() !== "ha-labels-picker") {
+      return [];
+    }
+
+    if (picker.id === "ai-asset-labels") {
+      const draftValues = Array.isArray(this._assetDraft?.label_ids)
+        ? this._assetDraft.label_ids
+        : [];
+      return draftValues
+        .map((labelId) => String(labelId || "").trim())
+        .filter((labelId) => !!labelId);
+    }
+
+    return [];
+  }
+
+  _syncMultiLabelPickerValue(picker, desiredValues) {
+    const normalizedValues = Array.isArray(desiredValues)
+      ? desiredValues
+          .map((labelId) => String(labelId || "").trim())
+          .filter((labelId) => !!labelId)
+      : [];
+
+    if (!normalizedValues.length) {
+      return;
+    }
+
+    try {
+      if (typeof picker._setValue === "function") {
+        picker._setValue(normalizedValues);
+      }
+    } catch (e) {}
+
+    try {
+      picker.value = [...normalizedValues];
+    } catch (e) {}
+
+    try {
+      if (typeof picker.requestUpdate === "function") {
+        picker.requestUpdate();
+      }
+    } catch (e) {}
   }
 
   _refreshAllLabelPickers() {
