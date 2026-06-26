@@ -12204,6 +12204,14 @@ _getAssetTimelineItems(attrs) {
         syncDialogDefaultLabels();
       }, 300);
 
+      let labelPickerUserInteracted = false;
+      const markLabelPickerInteracted = () => {
+        labelPickerUserInteracted = true;
+      };
+      labelPicker.addEventListener("pointerdown", markLabelPickerInteracted, { passive: true });
+      labelPicker.addEventListener("click", markLabelPickerInteracted);
+      labelPicker.addEventListener("keydown", markLabelPickerInteracted);
+
       // Default room
       areaPicker.value = roomId;
 
@@ -12282,8 +12290,34 @@ _getAssetTimelineItems(attrs) {
 
       // Labels
       labelPicker.addEventListener("value-changed", (e) => {
+        const nextValues = Array.isArray(e.detail?.value)
+          ? e.detail.value
+              .map((labelId) => String(labelId || "").trim())
+              .filter((labelId) => !!labelId)
+          : [];
+
+        // Ignore picker bootstrap churn until the user has actually interacted.
+        if (!labelPickerUserInteracted) {
+          if (!nextValues.length) {
+            return;
+          }
+
+          const currentValues = Array.isArray(this._assetDraft?.label_ids)
+            ? this._assetDraft.label_ids
+                .map((labelId) => String(labelId || "").trim())
+                .filter((labelId) => !!labelId)
+            : [];
+
+          if (
+            nextValues.length === currentValues.length
+            && nextValues.every((value, index) => value === currentValues[index])
+          ) {
+            return;
+          }
+        }
+
         this._assetDraft.labels_touched = true;
-        this._assetDraft.label_ids = e.detail?.value || [];
+        this._assetDraft.label_ids = nextValues;
       });
 
       cancelBtn.onclick = () => dialog.remove();
