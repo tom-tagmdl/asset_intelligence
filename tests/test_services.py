@@ -10,12 +10,14 @@ from homeassistant.exceptions import HomeAssistantError
 
 from custom_components.asset_intelligence.__init__ import async_setup
 from custom_components.asset_intelligence.const import DOMAIN
+from custom_components.asset_intelligence.coordinator import AssetIntelligenceCoordinator
 
 
 class FakeStore:
     def __init__(self, hass):
         self.hass = hass
         self.assets: dict[str, dict] = {}
+        self.rooms: dict[str, dict] = {}
         self.system_defaults = {}
 
     async def async_load(self):
@@ -33,6 +35,60 @@ class FakeStore:
     async def add_or_replace(self, asset_dict):
         self.assets[asset_dict["asset_id"]] = asset_dict
 
+    def build_measurement_room_event(
+        self,
+        asset_id,
+        *,
+        event_type,
+        timestamp,
+        actor=None,
+        room_area_id=None,
+        started_at=None,
+        completed_at=None,
+        observation_count=0,
+        last_observation_at=None,
+        initial_room_environment=None,
+        profile=None,
+        sensors=None,
+    ):
+        asset_name = self.assets.get(asset_id, {}).get("name") or asset_id or "Asset"
+        normalized_event_type = "stop" if str(event_type or "").lower() == "stop" else "start"
+        details = {
+            "event_type": normalized_event_type,
+            "asset_id": asset_id,
+            "asset_name": asset_name,
+            "room_area_id": room_area_id,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "observation_count": int(observation_count or 0),
+            "last_observation_at": last_observation_at,
+            "initial_room_environment": initial_room_environment if isinstance(initial_room_environment, dict) else {},
+        }
+        if profile is not None:
+            details["profile"] = profile
+        if sensors is not None:
+            details["sensors"] = list(sensors)
+        return {
+            "timestamp": timestamp,
+            "kind": "measurements",
+            "source": "room",
+            "categories": ["measurements"],
+            "color": "green" if normalized_event_type == "stop" else "neutral",
+            "title": f"{'Stop' if normalized_event_type == 'stop' else 'Start'} Measurement - {asset_name}",
+            "meta": timestamp,
+            "copy": f"By {actor} - {int(observation_count or 0)} observations" if actor else f"{int(observation_count or 0)} observations",
+            "details": details,
+        }
+
+    async def append_room_event(self, area_id, event, max_events=200):
+        room = self.rooms.setdefault(area_id, {"room_events": []})
+        events = room.get("room_events", [])
+        if not isinstance(events, list):
+            events = []
+        events.append(event)
+        room["room_events"] = events[-max_events:]
+        await self.async_save()
+
     async def async_save(self):
         return None
 
@@ -49,6 +105,9 @@ class FakeCoordinator:
 
     def _utcnow_iso(self):
         return "2026-06-23T00:00:00+00:00"
+
+    def _resolve_runtime_area_id(self, asset_id):
+        return "room_1"
 
 
 class FakeDocumentStorage:
@@ -821,6 +880,10 @@ async def test_start_measurement_service_sets_active_measurement_and_audit_entry
     assert isinstance(active["initial_room_environment"], dict)
     assert store.assets["asset_1"]["audit_log"][-1]["action"] == "start_measurement"
     assert store.assets["asset_1"]["audit_log"][-1]["details"]["started_at"] == "2026-06-23T00:00:00+00:00"
+    assert "room_1" in store.rooms
+    room_events = store.rooms["room_1"].get("room_events", [])
+    assert len(room_events) == 1
+    assert room_events[0].get("details", {}).get("event_type") == "start"
 
 
 @pytest.mark.asyncio
@@ -857,3 +920,45 @@ async def test_stop_measurement_service_marks_stop_request():
     assert active["stop_requested"] is True
     assert active["stop_requested_at"] == "2026-06-23T00:00:00+00:00"
     assert active["stop_requested_by"] == "tester"
+
+
+@pytest.mark.asyncio
+async def test_coordinator_finalize_writes_room_stop_event():
+    store = FakeStore(None)
+    store.assets["asset_1"] = {
+        "asset_id": "asset_1",
+        "name": "Test asset",
+        "audit_log": [],
+        "active_measurement": {
+            "started_at": "2026-06-23T00:00:00+00:00",
+            "started_by": "tester",
+            "stop_requested": True,
+            "stop_requested_by": "tester",
+            "stop_requested_at": "2026-06-23T00:05:00+00:00",
+            "update_count": 1,
+            "last_observation_at": "2026-06-23T00:05:00+00:00",
+            "initial_room_environment": {},
+            "sensors": [],
+            "completed": False,
+            "observations": [],
+        },
+    }
+
+    coordinator = AssetIntelligenceCoordinator.__new__(AssetIntelligenceCoordinator)
+    coordinator.hass = SimpleNamespace(bus=SimpleNamespace(async_fire=MagicMock()))
+    coordinator.store = store
+    coordinator._active_measurements = {}
+    coordinator._resolve_runtime_area_id = MagicMock(return_value="room_1")
+    coordinator._finalize_measurement_profile = MagicMock(return_value={"baseline": {}})
+
+    changed = coordinator._update_measurement_tracking(
+        asset_id="asset_1",
+        asset=store.assets["asset_1"],
+        room_environment={},
+        cycle_timestamp="2026-06-23T00:06:00+00:00",
+    )
+
+    assert changed is True
+    room_events = store.rooms.get("room_1", {}).get("room_events", [])
+    assert len(room_events) == 1
+    assert room_events[0].get("details", {}).get("event_type") == "stop"

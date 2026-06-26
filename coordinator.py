@@ -93,7 +93,37 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
         return None
     def _resolve_runtime_area_id(self, asset_id: str) -> str | None:
         """Return runtime area id for an asset from Home Assistant device registry."""
-        return self._get_device_area_id(asset_id)
+        asset = self.store.get(asset_id)
+        if isinstance(asset, dict):
+            direct_area_id = str(asset.get("area_id") or "").strip()
+            if direct_area_id:
+                return direct_area_id
+
+            room_area_id = str(asset.get("room_area_id") or "").strip()
+            if room_area_id:
+                return room_area_id
+
+            room_environment = asset.get("room_environment")
+            if isinstance(room_environment, dict):
+                env_area_id = str(room_environment.get("area_id") or "").strip()
+                if env_area_id:
+                    return env_area_id
+
+        area_id = self._get_device_area_id(asset_id)
+        if area_id:
+            return area_id
+
+        if not isinstance(asset, dict):
+            return None
+
+        links = asset.get("links") if isinstance(asset.get("links"), dict) else {}
+        linked_device_id = str(links.get("device_id") or "").strip()
+        if not linked_device_id:
+            return None
+
+        device_registry = dr.async_get(self.hass)
+        linked_device = device_registry.async_get_device({(DOMAIN, linked_device_id)})
+        return linked_device.area_id if linked_device else None
 
     def _get_registry_labels(self, asset_id: str) -> list[str]:
         """Return labels for an asset from Home Assistant registries.
@@ -827,6 +857,31 @@ class AssetIntelligenceCoordinator(DataUpdateCoordinator[dict[str, dict[str, Any
             )
             if len(audit_log) > 200:
                 del audit_log[:-200]
+
+            if room_area_id:
+                room_event = self.store.build_measurement_room_event(
+                    asset_id,
+                    event_type="stop",
+                    timestamp=cycle_timestamp,
+                    actor=measurement.get("stop_requested_by") or measurement.get("started_by") or "system",
+                    room_area_id=room_area_id,
+                    started_at=measurement.get("started_at"),
+                    completed_at=cycle_timestamp,
+                    observation_count=int(measurement.get("update_count") or 0),
+                    last_observation_at=measurement.get("last_observation_at"),
+                    initial_room_environment=measurement.get("initial_room_environment")
+                    if isinstance(measurement.get("initial_room_environment"), dict)
+                    else {},
+                    profile=profile,
+                    sensors=measurement.get("sensors") if isinstance(measurement.get("sensors"), list) else [],
+                )
+                room = self.store.rooms.get(room_area_id)
+                if not isinstance(room, dict):
+                    room = {}
+                    self.store.rooms[room_area_id] = room
+                events = room.get("room_events") if isinstance(room.get("room_events"), list) else []
+                events.append(room_event)
+                room["room_events"] = events[-200:]
 
             self.hass.bus.async_fire(
                 f"{DOMAIN}_environment_profile_completed",

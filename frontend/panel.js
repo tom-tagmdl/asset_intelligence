@@ -105,6 +105,7 @@ class AssetIntelligenceApp extends HTMLElement {
     this._assetHistoryFilter = "all";
     this._assetHistoryCache = {};
     this._assetHistoryLoading = {};
+    this._assetDetailSaveInFlight = {};
     this._openAssetOverflowId = null;
     this._panelVersionStatus = null;
     this._panelVersionDismissed = false;
@@ -3601,39 +3602,47 @@ class AssetIntelligenceApp extends HTMLElement {
     if (this._view?.type !== "asset-detail" || !this._view?.assetId) return;
     const asset = this._getAssetEntities().find((a) => a.attributes?.asset_id === this._view.assetId);
     if (!asset) return;
+    const assetId = this._view.assetId;
 
     const headerDirty = this._isAssetHeaderDirty(asset);
     const infoDirty = this._isAssetInfoDirty(asset);
     const financialDirty = this._isAssetFinancialDirty(asset);
+    const headerSaving = this._isAssetDetailSaveInFlight(assetId, "header");
+    const infoSaving = this._isAssetDetailSaveInFlight(assetId, "info");
+    const financialSaving = this._isAssetDetailSaveInFlight(assetId, "financial");
+    const environmentSaving = this._isAssetDetailSaveInFlight(assetId, "environment");
 
     const headerActions = this.querySelector("[data-asset-header-actions]");
     if (headerActions) {
-      headerActions.style.display = headerDirty ? "flex" : "none";
+      headerActions.style.display = (headerDirty || headerSaving) ? "flex" : "none";
     }
 
     const infoActions = this.querySelector("[data-asset-info-actions]");
     if (infoActions) {
-      infoActions.style.display = infoDirty ? "flex" : "none";
+      infoActions.style.display = (infoDirty || infoSaving) ? "flex" : "none";
     }
 
     const financialActions = this.querySelector("[data-asset-financial-actions]");
     if (financialActions) {
-      financialActions.style.display = financialDirty ? "flex" : "none";
+      financialActions.style.display = (financialDirty || financialSaving) ? "flex" : "none";
     }
 
     const saveButton = this.querySelector("[data-asset-info-save]");
     if (saveButton) {
-      saveButton.disabled = !infoDirty;
+      saveButton.disabled = infoSaving || !infoDirty;
+      saveButton.textContent = infoSaving ? "Saving..." : "Save changes";
     }
 
     const headerSaveButton = this.querySelector("[data-asset-header-save]");
     if (headerSaveButton) {
-      headerSaveButton.disabled = !headerDirty;
+      headerSaveButton.disabled = headerSaving || !headerDirty;
+      headerSaveButton.textContent = headerSaving ? "Saving..." : "Update";
     }
 
     const financialSaveButton = this.querySelector("[data-asset-financial-save]");
     if (financialSaveButton) {
-      financialSaveButton.disabled = !financialDirty;
+      financialSaveButton.disabled = financialSaving || !financialDirty;
+      financialSaveButton.textContent = financialSaving ? "Saving..." : "Save changes";
     }
 
     const environmentSaveButton = this.querySelector("[data-asset-environment-save]");
@@ -3642,9 +3651,49 @@ class AssetIntelligenceApp extends HTMLElement {
       const attrs = asset.attributes || {};
       const hasErrors = this._assetEnvironmentHasValidationErrors(this._view.assetId, attrs);
       const envDirty = this._isAssetEnvironmentDirty(this._view.assetId, attrs);
-      environmentSaveButton.disabled = hasErrors || !envDirty;
-      environmentActions.style.display = envDirty ? "flex" : "none";
+      environmentSaveButton.disabled = environmentSaving || hasErrors || !envDirty;
+      environmentSaveButton.textContent = environmentSaving ? "Saving..." : "Save changes";
+      environmentActions.style.display = (envDirty || environmentSaving) ? "flex" : "none";
     }
+
+    const headerCancelButton = this.querySelector("[data-asset-header-cancel]");
+    if (headerCancelButton) {
+      headerCancelButton.disabled = headerSaving;
+    }
+
+    const infoCancelButton = this.querySelector("[data-asset-info-cancel]");
+    if (infoCancelButton) {
+      infoCancelButton.disabled = infoSaving;
+    }
+
+    const financialCancelButton = this.querySelector("[data-asset-financial-cancel]");
+    if (financialCancelButton) {
+      financialCancelButton.disabled = financialSaving;
+    }
+
+    const environmentCancelButton = this.querySelector("[data-asset-environment-cancel]");
+    if (environmentCancelButton) {
+      environmentCancelButton.disabled = environmentSaving;
+    }
+  }
+
+  _assetDetailSaveKey(assetId, section) {
+    return `${String(assetId || "").trim()}::${String(section || "").trim()}`;
+  }
+
+  _isAssetDetailSaveInFlight(assetId, section) {
+    const key = this._assetDetailSaveKey(assetId, section);
+    return !!this._assetDetailSaveInFlight[key];
+  }
+
+  _setAssetDetailSaveInFlight(assetId, section, inFlight) {
+    const key = this._assetDetailSaveKey(assetId, section);
+    if (!key || key === "::") return;
+    if (inFlight) {
+      this._assetDetailSaveInFlight[key] = true;
+      return;
+    }
+    delete this._assetDetailSaveInFlight[key];
   }
 
   async _saveAssetHeaderBlock(assetId) {
@@ -5492,7 +5541,7 @@ class AssetIntelligenceApp extends HTMLElement {
                         title="Click to view details"
                       >
                         <div class="ai-timeline-meta">
-                          ${this._escapeHtml(item.meta)}
+                          ${this._escapeHtml(this._formatTimelineMeta(item))}
                         </div>
                         <div class="ai-timeline-title">
                           ${this._escapeHtml(item.title)}
@@ -6825,7 +6874,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-info-save");
         if (!assetId) return;
-        await this._saveAssetInfoBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "info", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetInfoBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "info", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -6835,7 +6891,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-header-save");
         if (!assetId) return;
-        await this._saveAssetHeaderBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "header", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetHeaderBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "header", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -6867,7 +6930,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-financial-save");
         if (!assetId) return;
-        await this._saveAssetFinancialBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "financial", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetFinancialBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "financial", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -6947,7 +7017,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-environment-save");
         if (!assetId) return;
-        await this._saveAssetEnvironmentLimits(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "environment", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetEnvironmentLimits(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "environment", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -10551,6 +10628,29 @@ _getAssetTimelineItems(attrs) {
     } catch (e) {
       return String(value);
     }
+  }
+
+  _formatTimelineMeta(item) {
+    if (!item || typeof item !== "object") return "—";
+
+    const tsMillis = Number(item._ts);
+    if (Number.isFinite(tsMillis) && tsMillis > 0) {
+      return this._formatLocalDateTime(tsMillis);
+    }
+
+    const details = item.details && typeof item.details === "object" ? item.details : {};
+    const fallbackTs =
+      details.timestamp
+      || details.occurred_at
+      || details.effective_at
+      || details.started_at
+      || details.completed_at
+      || "";
+    if (fallbackTs) {
+      return this._formatLocalDateTime(fallbackTs);
+    }
+
+    return String(item.meta || "—");
   }
 
   _stateColor(value) {

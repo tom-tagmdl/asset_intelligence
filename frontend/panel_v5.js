@@ -125,6 +125,9 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._renderQueued = false;
     this._suppressAssetPickerDraftWrites = false;
     this._measurementActionInFlight = {};
+    this._measurementPendingState = {};
+    this._measurementPendingStartedAt = {};
+    this._assetDetailSaveInFlight = {};
     this._assetOverflowDocBound = false;
 
     // MutationObserver to catch HA picker/selector elements that upgrade later
@@ -2365,6 +2368,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           box-shadow: 0 3px 10px rgba(3, 169, 244, 0.35);
         }
 
+        .ai-measurement-pill.pending {
+          background: #6b7280;
+          box-shadow: 0 3px 10px rgba(107, 114, 128, 0.35);
+        }
+
         .ai-measurement-elapsed {
           font-size: 13px;
           font-weight: 700;
@@ -2393,6 +2401,11 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
           cursor: pointer;
         }
 
+        .ai-measurement-stop:disabled {
+          cursor: wait;
+          opacity: 0.65;
+        }
+
         .ai-measurement-stop:hover {
           background: rgba(255, 255, 255, 0.24);
         }
@@ -2400,6 +2413,28 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         .ai-measurement-stop ha-icon {
           width: 18px;
           height: 18px;
+        }
+
+        .ai-measurement-pending-banner {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 7px 10px;
+          border-radius: 10px;
+          background: #fff4db;
+          color: #8a5a00;
+          border: 1px solid #f0d49a;
+          font-size: 12px;
+          font-weight: 700;
+        }
+
+        .ai-spin {
+          animation: ai-spin 1s linear infinite;
+        }
+
+        @keyframes ai-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
 
         .ai-secondary-button {
@@ -3603,7 +3638,8 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       const aAttrs = a.attributes || {};
       return this._resolveAssetRoomAreaId(aAttrs, a.entity_id) === roomId;
     });
-    const roomMeasurementHistoryAll = this._buildRoomMeasurementHistory(roomId, roomName, roomAssets);
+    const roomEvents = Array.isArray(attrs.room_events) ? attrs.room_events : [];
+    const roomMeasurementHistoryAll = this._buildRoomMeasurementHistory(roomId, roomName, roomAssets, roomEvents);
     const roomHistoryFilter = String(this._roomHistoryFilterByRoom?.[roomId] || "all").toLowerCase();
     const roomHistoryAssetFilter = String(this._roomHistoryAssetFilterByRoom?.[roomId] || "all");
     const roomAssetOptions = roomAssets
@@ -4066,13 +4102,73 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     `;
   }
 
-  _buildRoomMeasurementHistory(roomId, roomName, roomAssets) {
+  _buildRoomMeasurementHistory(roomId, roomName, roomAssets, roomEvents = []) {
     const normalizedRoomId = String(roomId || "").trim();
-    if (!normalizedRoomId || !Array.isArray(roomAssets) || !roomAssets.length) {
+    if (!normalizedRoomId) {
       return [];
     }
 
-    const entries = [];
+    const roomEventEntries = [];
+    if (Array.isArray(roomEvents) && roomEvents.length) {
+      roomEvents.forEach((evt) => {
+        if (!evt || typeof evt !== "object") return;
+
+        const details = evt.details && typeof evt.details === "object" ? evt.details : {};
+        const eventTypeRaw = String(details.event_type || "").toLowerCase();
+        const eventType = eventTypeRaw === "stop" ? "stop" : "start";
+
+        const eventRoomId = String(
+          details.room_area_id || details.room_id || details.area_id || ""
+        ).trim();
+        if (eventRoomId && eventRoomId !== normalizedRoomId) {
+          return;
+        }
+
+        const timestampValue = String(
+          evt.timestamp || details.completed_at || details.started_at || ""
+        ).trim();
+        const parsedTs = new Date(timestampValue).getTime();
+        const ts = Number.isFinite(parsedTs) ? parsedTs : 0;
+
+        const assetId = String(details.asset_id || "").trim();
+        const assetName = String(details.asset_name || "").trim() || "Asset";
+        const actor = String(evt.actor || evt.user || "").trim();
+        const observationCount = Number(details.observation_count ?? NaN);
+        const hasObservationCount = Number.isFinite(observationCount) && observationCount >= 0;
+
+        const copyParts = [];
+        if (actor) {
+          copyParts.push(`By ${actor}`);
+        }
+        if (hasObservationCount) {
+          copyParts.push(`${Math.trunc(observationCount)} observations`);
+        }
+
+        roomEventEntries.push({
+          kind: "measurements",
+          color: eventType === "stop" ? "green" : "neutral",
+          source: "room",
+          title: String(evt.title || `${eventType === "stop" ? "Stop" : "Start"} Measurement - ${assetName}`),
+          meta: this._formatLocalDateTime(timestampValue),
+          copy: copyParts.join(" - ") || String(evt.copy || ""),
+          details: {
+            event_type: eventType,
+            room_id: normalizedRoomId,
+            room_name: roomName,
+            asset_id: assetId,
+            asset_name: assetName,
+            ...(details && typeof details === "object" ? details : {}),
+          },
+          _ts: ts,
+        });
+      });
+    }
+
+    const entries = [...roomEventEntries];
+
+    if (!Array.isArray(roomAssets) || !roomAssets.length) {
+      return entries.sort((a, b) => Number(b._ts || 0) - Number(a._ts || 0));
+    }
 
     roomAssets.forEach((assetEntity) => {
       const attrs = assetEntity?.attributes || {};
@@ -4144,7 +4240,23 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       });
     });
 
-    return entries.sort((a, b) => Number(b._ts || 0) - Number(a._ts || 0));
+    const dedupe = new Map();
+    entries.forEach((entry) => {
+      const details = entry?.details && typeof entry.details === "object" ? entry.details : {};
+      const key = [
+        String(details.asset_id || ""),
+        String(details.event_type || ""),
+        String(entry?._ts || 0),
+        String(details.observation_count ?? ""),
+      ].join("|");
+
+      const existing = dedupe.get(key);
+      if (!existing || String(existing.source || "") === "audit") {
+        dedupe.set(key, entry);
+      }
+    });
+
+    return Array.from(dedupe.values()).sort((a, b) => Number(b._ts || 0) - Number(a._ts || 0));
   }
 
   _buildRoomMeasurementSummary(historyItems, roomAssetCount = 0) {
@@ -4755,39 +4867,47 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     if (this._view?.type !== "asset-detail" || !this._view?.assetId) return;
     const asset = this._getAssetEntities().find((a) => a.attributes?.asset_id === this._view.assetId);
     if (!asset) return;
+    const assetId = this._view.assetId;
 
     const headerDirty = this._isAssetHeaderDirty(asset);
     const infoDirty = this._isAssetInfoDirty(asset);
     const financialDirty = this._isAssetFinancialDirty(asset);
+    const headerSaving = this._isAssetDetailSaveInFlight(assetId, "header");
+    const infoSaving = this._isAssetDetailSaveInFlight(assetId, "info");
+    const financialSaving = this._isAssetDetailSaveInFlight(assetId, "financial");
+    const environmentSaving = this._isAssetDetailSaveInFlight(assetId, "environment");
 
     const headerActions = this.querySelector("[data-asset-header-actions]");
     if (headerActions) {
-      headerActions.style.display = headerDirty ? "flex" : "none";
+      headerActions.style.display = (headerDirty || headerSaving) ? "flex" : "none";
     }
 
     const infoActions = this.querySelector("[data-asset-info-actions]");
     if (infoActions) {
-      infoActions.style.display = infoDirty ? "flex" : "none";
+      infoActions.style.display = (infoDirty || infoSaving) ? "flex" : "none";
     }
 
     const financialActions = this.querySelector("[data-asset-financial-actions]");
     if (financialActions) {
-      financialActions.style.display = financialDirty ? "flex" : "none";
+      financialActions.style.display = (financialDirty || financialSaving) ? "flex" : "none";
     }
 
     const saveButton = this.querySelector("[data-asset-info-save]");
     if (saveButton) {
-      saveButton.disabled = !infoDirty;
+      saveButton.disabled = infoSaving || !infoDirty;
+      saveButton.textContent = infoSaving ? "Saving..." : "Save changes";
     }
 
     const headerSaveButton = this.querySelector("[data-asset-header-save]");
     if (headerSaveButton) {
-      headerSaveButton.disabled = !headerDirty;
+      headerSaveButton.disabled = headerSaving || !headerDirty;
+      headerSaveButton.textContent = headerSaving ? "Saving..." : "Update";
     }
 
     const financialSaveButton = this.querySelector("[data-asset-financial-save]");
     if (financialSaveButton) {
-      financialSaveButton.disabled = !financialDirty;
+      financialSaveButton.disabled = financialSaving || !financialDirty;
+      financialSaveButton.textContent = financialSaving ? "Saving..." : "Save changes";
     }
 
     const environmentSaveButton = this.querySelector("[data-asset-environment-save]");
@@ -4796,9 +4916,49 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       const attrs = asset.attributes || {};
       const hasErrors = this._assetEnvironmentHasValidationErrors(this._view.assetId, attrs);
       const envDirty = this._isAssetEnvironmentDirty(this._view.assetId, attrs);
-      environmentSaveButton.disabled = hasErrors || !envDirty;
-      environmentActions.style.display = envDirty ? "flex" : "none";
+      environmentSaveButton.disabled = environmentSaving || hasErrors || !envDirty;
+      environmentSaveButton.textContent = environmentSaving ? "Saving..." : "Save changes";
+      environmentActions.style.display = (envDirty || environmentSaving) ? "flex" : "none";
     }
+
+    const headerCancelButton = this.querySelector("[data-asset-header-cancel]");
+    if (headerCancelButton) {
+      headerCancelButton.disabled = headerSaving;
+    }
+
+    const infoCancelButton = this.querySelector("[data-asset-info-cancel]");
+    if (infoCancelButton) {
+      infoCancelButton.disabled = infoSaving;
+    }
+
+    const financialCancelButton = this.querySelector("[data-asset-financial-cancel]");
+    if (financialCancelButton) {
+      financialCancelButton.disabled = financialSaving;
+    }
+
+    const environmentCancelButton = this.querySelector("[data-asset-environment-cancel]");
+    if (environmentCancelButton) {
+      environmentCancelButton.disabled = environmentSaving;
+    }
+  }
+
+  _assetDetailSaveKey(assetId, section) {
+    return `${String(assetId || "").trim()}::${String(section || "").trim()}`;
+  }
+
+  _isAssetDetailSaveInFlight(assetId, section) {
+    const key = this._assetDetailSaveKey(assetId, section);
+    return !!this._assetDetailSaveInFlight[key];
+  }
+
+  _setAssetDetailSaveInFlight(assetId, section, inFlight) {
+    const key = this._assetDetailSaveKey(assetId, section);
+    if (!key || key === "::") return;
+    if (inFlight) {
+      this._assetDetailSaveInFlight[key] = true;
+      return;
+    }
+    delete this._assetDetailSaveInFlight[key];
   }
 
   async _saveAssetHeaderBlock(assetId) {
@@ -5906,13 +6066,30 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       : null;
     const measurementStartedAt = String(activeMeasurement?.started_at || "").trim();
     const measurementIsActive = !!measurementStartedAt && !activeMeasurement?.completed;
+    const measurementPendingState = String(this._measurementPendingState?.[assetId] || "");
+    const measurementIsStarting = measurementPendingState === "starting";
+    const measurementIsStopping = measurementPendingState === "stopping";
+    const measurementDisplayIsActive = measurementIsStarting
+      ? true
+      : (measurementIsStopping ? false : measurementIsActive);
+    const measurementEffectiveStartedAt = measurementDisplayIsActive
+      ? String(
+          measurementStartedAt
+          || (measurementIsStarting ? this._measurementPendingStartedAt?.[assetId] : "")
+          || ""
+        ).trim()
+      : "";
+    const measurementActionInFlight = !!this._measurementActionInFlight?.[assetId] || measurementIsStarting || measurementIsStopping;
+    const measurementPendingLabel = measurementIsStopping
+      ? "Stopping measurement..."
+      : "Starting measurement...";
     const measurementUpdateCount = Number(
       activeMeasurement?.update_count
       ?? (Array.isArray(activeMeasurement?.observations) ? activeMeasurement.observations.length : 0)
       ?? 0
     );
-    const measurementElapsed = measurementStartedAt
-      ? this._formatMeasurementElapsed(measurementStartedAt)
+    const measurementElapsed = measurementEffectiveStartedAt
+      ? this._formatMeasurementElapsed(measurementEffectiveStartedAt)
       : "00:00:00";
 
     return `
@@ -5962,19 +6139,20 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
             </div>
 
             <div class="ai-asset-header-actions">
-              ${measurementIsActive
+              ${measurementDisplayIsActive
                 ? `
                   <div
-                    class="ai-measurement-pill"
-                    data-measurement-started-at="${this._escapeHtml(measurementStartedAt)}"
+                    class="ai-measurement-pill ${measurementIsStopping ? "pending" : ""}"
+                    data-measurement-started-at="${this._escapeHtml(measurementEffectiveStartedAt)}"
                   >
                     <span class="ai-measurement-elapsed" data-measurement-elapsed>${this._escapeHtml(measurementElapsed)}</span>
-                    <span class="ai-measurement-count">Updates: ${Number.isFinite(measurementUpdateCount) ? measurementUpdateCount : 0}</span>
+                    <span class="ai-measurement-count">${measurementIsStopping ? "Stopping..." : (measurementIsStarting ? "Starting..." : `Updates: ${Number.isFinite(measurementUpdateCount) ? measurementUpdateCount : 0}`)}</span>
                     <button
                       class="ai-measurement-stop"
                       type="button"
                       title="Stop measurement"
                       data-asset-stop-measure="${this._escapeHtml(assetId)}"
+                      ${measurementActionInFlight ? "disabled" : ""}
                     >
                       <ha-icon icon="mdi:stop"></ha-icon>
                     </button>
@@ -6006,21 +6184,23 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                   <ha-icon icon="mdi:dots-vertical"></ha-icon>
                 </button>
                 <div class="ai-overflow-menu">
-                  ${measurementIsActive
+                  ${measurementDisplayIsActive
                     ? `
                       <button
                         class="ai-overflow-item"
                         data-asset-stop-measure="${this._escapeHtml(assetId)}"
+                        ${measurementActionInFlight ? "disabled" : ""}
                       >
-                        Stop measurement
+                        ${measurementActionInFlight ? "Stopping..." : "Stop measurement"}
                       </button>
                     `
                     : `
                       <button
                         class="ai-overflow-item"
                         data-asset-measure="${this._escapeHtml(assetId)}"
+                        ${measurementActionInFlight ? "disabled" : ""}
                       >
-                        Start measurement
+                        ${measurementActionInFlight ? "Starting..." : "Start measurement"}
                       </button>
                     `
                   }
@@ -6038,6 +6218,14 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                   </button>
                 </div>
               </div>
+
+              ${measurementActionInFlight
+                ? `<div class="ai-measurement-pending-banner" style="margin-top:8px;">
+                    <ha-icon class="ai-spin" icon="mdi:loading"></ha-icon>
+                    <span>${this._escapeHtml(measurementPendingLabel)}</span>
+                  </div>`
+                : ""
+              }
             </div>
           </div>
 
@@ -6684,7 +6872,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
                         title="Click to view details"
                       >
                         <div class="ai-timeline-meta">
-                          ${this._escapeHtml(item.meta)}
+                          ${this._escapeHtml(this._formatTimelineMeta(item))}
                         </div>
                         <div class="ai-timeline-title">
                           ${this._escapeHtml(item.title)}
@@ -7993,7 +8181,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-info-save");
         if (!assetId) return;
-        await this._saveAssetInfoBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "info", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetInfoBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "info", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -8003,7 +8198,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-header-save");
         if (!assetId) return;
-        await this._saveAssetHeaderBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "header", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetHeaderBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "header", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -8035,7 +8237,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-financial-save");
         if (!assetId) return;
-        await this._saveAssetFinancialBlock(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "financial", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetFinancialBlock(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "financial", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -8115,7 +8324,14 @@ _getAssetTimelineItems(attrs) {
         e.stopPropagation();
         const assetId = el.getAttribute("data-asset-environment-save");
         if (!assetId) return;
-        await this._saveAssetEnvironmentLimits(assetId);
+        this._setAssetDetailSaveInFlight(assetId, "environment", true);
+        this._refreshAssetInfoSaveState();
+        try {
+          await this._saveAssetEnvironmentLimits(assetId);
+        } finally {
+          this._setAssetDetailSaveInFlight(assetId, "environment", false);
+          this._refreshAssetInfoSaveState();
+        }
       };
     });
 
@@ -8384,21 +8600,20 @@ _getAssetTimelineItems(attrs) {
 
         const onCurrentAsset = this._view?.type === "asset-detail" && this._view?.assetId === assetId;
         const wasDirtyBefore = onCurrentAsset ? this._hasUnsavedAssetDetailChanges(assetId) : true;
+        this._measurementPendingState[assetId] = "starting";
+        this._measurementPendingStartedAt[assetId] = new Date().toISOString();
         this._measurementActionInFlight[assetId] = true;
+        this._assetDetailInteractionActive = false;
+        if (this._assetDetailInteractionTimer) {
+          clearTimeout(this._assetDetailInteractionTimer);
+          this._assetDetailInteractionTimer = null;
+        }
+        this._render();
 
         try {
           el.disabled = true;
           await this._callService("asset_intelligence", "start_measurement", { asset_id: assetId });
-          await this._load();
-
-          const refreshedAsset = this._getAssetEntities().find((a) => a.attributes?.asset_id === assetId);
-          const refreshedActiveMeasurement = refreshedAsset?.attributes?.active_measurement;
-          const measurementStartedAt = String(refreshedActiveMeasurement?.started_at || "").trim();
-          const measurementIsActive = !!measurementStartedAt && !refreshedActiveMeasurement?.completed;
-          if (!measurementIsActive) {
-            // HA state propagation can lag the service response; do one immediate second refresh.
-            await this._load();
-          }
+          await this._waitForMeasurementTransition(assetId, true);
 
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
@@ -8412,7 +8627,10 @@ _getAssetTimelineItems(attrs) {
           alert("Failed to start measurement");
         } finally {
           this._measurementActionInFlight[assetId] = false;
+          delete this._measurementPendingState[assetId];
+          delete this._measurementPendingStartedAt[assetId];
           el.disabled = false;
+          this._render();
         }
       };
     });
@@ -8431,12 +8649,19 @@ _getAssetTimelineItems(attrs) {
 
         const onCurrentAsset = this._view?.type === "asset-detail" && this._view?.assetId === assetId;
         const wasDirtyBefore = onCurrentAsset ? this._hasUnsavedAssetDetailChanges(assetId) : true;
+        this._measurementPendingState[assetId] = "stopping";
         this._measurementActionInFlight[assetId] = true;
+        this._assetDetailInteractionActive = false;
+        if (this._assetDetailInteractionTimer) {
+          clearTimeout(this._assetDetailInteractionTimer);
+          this._assetDetailInteractionTimer = null;
+        }
+        this._render();
 
         try {
           el.disabled = true;
           await this._callService("asset_intelligence", "stop_measurement", { asset_id: assetId });
-          await this._load();
+          await this._waitForMeasurementTransition(assetId, false);
           await this._ensureAssetHistoryLoaded(assetId, true);
           this._render();
 
@@ -8449,7 +8674,10 @@ _getAssetTimelineItems(attrs) {
           alert("Failed to stop measurement");
         } finally {
           this._measurementActionInFlight[assetId] = false;
+          delete this._measurementPendingState[assetId];
+          delete this._measurementPendingStartedAt[assetId];
           el.disabled = false;
+          this._render();
         }
       };
     });
@@ -8840,6 +9068,28 @@ _getAssetTimelineItems(attrs) {
     return new Promise((resolve) => {
       setTimeout(resolve, ms);
     });
+  }
+
+  _isMeasurementCurrentlyActive(assetId) {
+    const entity = this._getAssetEntities().find(
+      (candidate) => candidate.attributes?.asset_id === assetId
+    );
+    const activeMeasurement = entity?.attributes?.active_measurement;
+    const startedAt = String(activeMeasurement?.started_at || "").trim();
+    return !!startedAt && !activeMeasurement?.completed;
+  }
+
+  async _waitForMeasurementTransition(assetId, shouldBeActive, attempts = 12, delayMs = 500) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      await this._load();
+      if (this._isMeasurementCurrentlyActive(assetId) === shouldBeActive) {
+        return true;
+      }
+      if (attempt < attempts - 1) {
+        await this._wait(delayMs);
+      }
+    }
+    return false;
   }
 
   async _waitForAssetVisibleInRoom(assetId, roomId = null) {
@@ -11983,6 +12233,29 @@ _getAssetTimelineItems(attrs) {
     } catch (e) {
       return String(value);
     }
+  }
+
+  _formatTimelineMeta(item) {
+    if (!item || typeof item !== "object") return "-";
+
+    const tsMillis = Number(item._ts);
+    if (Number.isFinite(tsMillis) && tsMillis > 0) {
+      return this._formatLocalDateTime(tsMillis);
+    }
+
+    const details = item.details && typeof item.details === "object" ? item.details : {};
+    const fallbackTs =
+      details.timestamp
+      || details.occurred_at
+      || details.effective_at
+      || details.started_at
+      || details.completed_at
+      || "";
+    if (fallbackTs) {
+      return this._formatLocalDateTime(fallbackTs);
+    }
+
+    return String(item.meta || "-");
   }
 
   _stateColor(value) {

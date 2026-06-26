@@ -3479,6 +3479,20 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             },
         )
 
+        if room_area_id:
+            room_event = coordinator.store.build_measurement_room_event(
+                str(asset_id),
+                event_type="start",
+                timestamp=now_iso,
+                actor=actor,
+                room_area_id=room_area_id,
+                started_at=now_iso,
+                observation_count=0,
+                initial_room_environment=initial_room_environment,
+                sensors=measurement.get("sensors") if isinstance(measurement.get("sensors"), list) else [],
+            )
+            await coordinator.store.append_room_event(room_area_id, room_event)
+
         await coordinator.store.async_save()
         await coordinator.async_request_refresh()
 

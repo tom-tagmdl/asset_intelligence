@@ -741,6 +741,7 @@ class RoomEnvironmentEntity(CoordinatorEntity, SensorEntity):
             ),
             "windows": windows,
             "room_events_count": len(room_events),
+            "room_events": room_events,
             "confidence": env.get("confidence", "STALE"),
             "last_updated": env.get("last_updated"),
             "source_status": env.get("source_status", {}),

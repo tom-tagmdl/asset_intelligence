@@ -646,6 +646,62 @@ class AssetStore:
 
         await self.async_save()
 
+    def build_measurement_room_event(
+        self,
+        asset_id: str,
+        *,
+        event_type: str,
+        timestamp: str,
+        actor: str | None = None,
+        room_area_id: str | None = None,
+        started_at: str | None = None,
+        completed_at: str | None = None,
+        observation_count: int = 0,
+        last_observation_at: str | None = None,
+        initial_room_environment: dict[str, Any] | None = None,
+        profile: dict[str, Any] | None = None,
+        sensors: list[Any] | None = None,
+    ) -> Dict[str, Any]:
+        asset = self.assets.get(asset_id) if asset_id else None
+        asset_name = str((asset or {}).get("name") or asset_id or "Asset").strip() or "Asset"
+        normalized_event_type = "stop" if str(event_type or "").lower() == "stop" else "start"
+        is_stop = normalized_event_type == "stop"
+
+        copy_parts: list[str] = []
+        if actor:
+            copy_parts.append(f"By {actor}")
+        copy_parts.append(f"{int(observation_count or 0)} observations")
+
+        details: Dict[str, Any] = {
+            "event_type": normalized_event_type,
+            "asset_id": asset_id,
+            "asset_name": asset_name,
+            "room_area_id": room_area_id,
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "observation_count": int(observation_count or 0),
+            "last_observation_at": last_observation_at,
+            "initial_room_environment": deepcopy(initial_room_environment)
+            if isinstance(initial_room_environment, dict)
+            else {},
+        }
+        if sensors is not None:
+            details["sensors"] = list(sensors)
+        if profile is not None:
+            details["profile"] = deepcopy(profile) if isinstance(profile, dict) else profile
+
+        return {
+            "timestamp": timestamp,
+            "kind": "measurements",
+            "source": "room",
+            "categories": ["measurements"],
+            "color": "green" if is_stop else "neutral",
+            "title": f"{'Stop' if is_stop else 'Start'} Measurement - {asset_name}",
+            "meta": timestamp,
+            "copy": " - ".join(copy_parts),
+            "details": details,
+        }
+
     # -----------------------------------------------------------
     # ASSET CRUD
     # -----------------------------------------------------------
