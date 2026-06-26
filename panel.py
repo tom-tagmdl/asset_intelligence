@@ -44,7 +44,7 @@ def _resolve_panel_asset(frontend_dir: str, panel_candidates: list[str]) -> tupl
             for name in panel_candidates
             if os.path.exists(os.path.join(frontend_dir, name))
         ),
-        "panel.js",
+        panel_candidates[0] if panel_candidates else "panel_v5.js",
     )
 
     panel_js_path = os.path.join(frontend_dir, selected_panel)
@@ -62,7 +62,7 @@ async def async_setup_panel(hass):
     domain_data = hass.data.setdefault(DOMAIN, {})
 
     frontend_dir = hass.config.path("custom_components/asset_intelligence/frontend")
-    panel_candidates = ["panel_v5.js", "panel.js"]
+    panel_candidates = ["panel_v5.js"]
     selected_panel, cache_token = await hass.async_add_executor_job(
         _resolve_panel_asset,
         frontend_dir,

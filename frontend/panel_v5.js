@@ -714,8 +714,6 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
   }
 
   _getDefaultLabelIds() {
-    const states = this._hass?.states || {};
-
     const normalize = (value) => {
       if (!Array.isArray(value)) return [];
       return value
@@ -723,46 +721,19 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         .filter((labelId) => !!labelId);
     };
 
-    const extractFromAttrs = (attrs) => {
-      if (!attrs || typeof attrs !== "object") return [];
-
-      const direct = normalize(attrs.default_label_ids);
-      if (direct.length) return direct;
-
-      const systemDefaults = attrs.system_defaults;
-      if (systemDefaults && typeof systemDefaults === "object") {
-        const nested = normalize(systemDefaults.default_label_ids);
-        if (nested.length) return nested;
-      }
-
-      return [];
-    };
-
-    // Primary source: persisted system defaults loaded from integration storage.
+    // Primary source: integration persisted settings.
     const persistedDefaults = normalize(this._systemDefaults?.default_label_ids);
-    if (persistedDefaults.length) {
-      return persistedDefaults;
-    }
+    if (persistedDefaults.length) return persistedDefaults;
 
-    // Preferred known summary sensor IDs (may vary by naming/translation).
-    const preferredEntities = [
-      "sensor.asset_intelligence_assets",
-      "sensor.asset_intelligence_asset_list",
-    ];
+    // Fallback source: integration summary sensor attributes.
+    const summary = this._hass?.states?.["sensor.asset_intelligence_assets"];
+    const attrs = summary?.attributes || {};
 
-    for (const entityId of preferredEntities) {
-      const labels = extractFromAttrs(states?.[entityId]?.attributes || {});
-      if (labels.length) return labels;
-    }
+    const directDefaults = normalize(attrs.default_label_ids);
+    if (directDefaults.length) return directDefaults;
 
-    // Fallback: scan all Asset Intelligence sensors for defaults.
-    for (const state of Object.values(states)) {
-      const entityId = String(state?.entity_id || "");
-      if (!entityId.startsWith("sensor.asset_intelligence_")) continue;
-
-      const labels = extractFromAttrs(state?.attributes || {});
-      if (labels.length) return labels;
-    }
+    const nestedDefaults = normalize(attrs.system_defaults?.default_label_ids);
+    if (nestedDefaults.length) return nestedDefaults;
 
     return [];
   }
