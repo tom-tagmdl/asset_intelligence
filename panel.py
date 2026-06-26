@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 import logging
+from aiohttp import web
 
-from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.http import HomeAssistantView, StaticPathConfig
 from homeassistant.components.frontend import async_register_built_in_panel
 
 from .const import DOMAIN
@@ -12,6 +13,28 @@ from .const import DOMAIN
 _LOGGER = logging.getLogger(__name__)
 _PANEL_REGISTERED_FLAG = "_panel_registered"
 _STATIC_REGISTERED_FLAG = "_panel_static_registered"
+_VERSION_VIEW_REGISTERED_FLAG = "_panel_version_view_registered"
+_PANEL_BUILD_INFO_KEY = "_panel_build_info"
+
+
+class AssetIntelligencePanelVersionView(HomeAssistantView):
+    """Expose the active panel bundle token so stale clients can self-detect."""
+
+    url = "/api/asset_intelligence/panel_version"
+    name = "api:asset_intelligence:panel_version"
+    requires_auth = True
+
+    async def get(self, request):
+        hass = request.app["hass"]
+        domain_data = hass.data.setdefault(DOMAIN, {})
+        build_info = domain_data.get(_PANEL_BUILD_INFO_KEY)
+
+        if not isinstance(build_info, dict) or not build_info.get("selected_panel"):
+            raise web.HTTPServiceUnavailable(text="Panel build info unavailable")
+
+        response = web.json_response(build_info)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 def _resolve_panel_asset(frontend_dir: str, panel_candidates: list[str]) -> tuple[str, str]:
@@ -45,6 +68,10 @@ async def async_setup_panel(hass):
         frontend_dir,
         panel_candidates,
     )
+    domain_data[_PANEL_BUILD_INFO_KEY] = {
+        "selected_panel": selected_panel,
+        "cache_token": cache_token,
+    }
 
     if not domain_data.get(_STATIC_REGISTERED_FLAG):
         try:
@@ -60,6 +87,14 @@ async def async_setup_panel(hass):
             domain_data[_STATIC_REGISTERED_FLAG] = True
         except Exception:
             _LOGGER.exception("Asset Intelligence: failed registering panel static path")
+            return
+
+    if not domain_data.get(_VERSION_VIEW_REGISTERED_FLAG):
+        try:
+            hass.http.register_view(AssetIntelligencePanelVersionView())
+            domain_data[_VERSION_VIEW_REGISTERED_FLAG] = True
+        except Exception:
+            _LOGGER.exception("Asset Intelligence: failed registering panel version view")
             return
 
     if domain_data.get(_PANEL_REGISTERED_FLAG):

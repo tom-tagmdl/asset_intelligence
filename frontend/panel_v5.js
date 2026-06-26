@@ -44,6 +44,42 @@ globalThis.__AI_PHYSICAL_DOCUMENT_LOCATIONS = PHYSICAL_DOCUMENT_LOCATIONS;
 var MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES || (3 * 1024 * 1024);
 globalThis.__AI_MAX_BROWSER_DOCUMENT_UPLOAD_BYTES = MAX_BROWSER_DOCUMENT_UPLOAD_BYTES;
 
+var AI_PANEL_BUILD = globalThis.__AI_PANEL_BUILD || (() => {
+  let src = "";
+
+  try {
+    src = String(document.currentScript?.src || "");
+  } catch (e) {}
+
+  if (!src) {
+    try {
+      const scripts = Array.from(document.scripts || []);
+      src = scripts
+        .map((script) => String(script?.src || ""))
+        .find((value) => value.includes("/asset-intelligence-static/")) || "";
+    } catch (e) {}
+  }
+
+  let selectedPanel = "";
+  let cacheToken = "";
+
+  if (src) {
+    try {
+      const url = new URL(src, window.location.origin);
+      const segments = url.pathname.split("/");
+      selectedPanel = segments[segments.length - 1] || "";
+      cacheToken = url.searchParams.get("v") || "";
+    } catch (e) {}
+  }
+
+  return {
+    src,
+    selected_panel: selectedPanel,
+    cache_token: cacheToken,
+  };
+})();
+globalThis.__AI_PANEL_BUILD = AI_PANEL_BUILD;
+
 var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelligenceApp extends HTMLElement {
   constructor() {
     super();
@@ -72,6 +108,10 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     this._assetHistoryLoading = {};
     this._roomHistoryFilterByRoom = {};
     this._roomHistoryAssetFilterByRoom = {};
+    this._panelVersionStatus = null;
+    this._panelVersionDismissed = false;
+    this._panelVersionCheckInFlight = null;
+    this._lastPanelVersionCheckAt = 0;
     this._measurementTicker = null;
     this._assetDetailInteractionActive = false;
     this._assetDetailInteractionTimer = null;
@@ -251,6 +291,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
 
   set hass(hass) {
     this._hass = hass;
+    this._maybeCheckPanelVersion();
 
     // Γ£à If the user is editing Asset Detail and has unsaved draft values,
     // do NOT repaint the screen from live backend updates.
@@ -1083,6 +1124,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       }
 
       this._refreshLabelRegistry();
+      this._maybeCheckPanelVersion(true);
 
     } catch (e) {
       console.error("Asset Intelligence registry load failed", e);
@@ -1090,6 +1132,76 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
     }
 
     this._render();
+  }
+
+  _maybeCheckPanelVersion(force = false) {
+    const now = Date.now();
+
+    if (!force && this._panelVersionCheckInFlight) {
+      return this._panelVersionCheckInFlight;
+    }
+
+    if (!force && now - this._lastPanelVersionCheckAt < 60000) {
+      return Promise.resolve(this._panelVersionStatus);
+    }
+
+    this._lastPanelVersionCheckAt = now;
+    this._panelVersionCheckInFlight = this._checkPanelVersion().finally(() => {
+      this._panelVersionCheckInFlight = null;
+    });
+    return this._panelVersionCheckInFlight;
+  }
+
+  async _checkPanelVersion() {
+    const runningPanel = String(AI_PANEL_BUILD?.selected_panel || "");
+    const runningToken = String(AI_PANEL_BUILD?.cache_token || "");
+
+    if (!runningPanel || !runningToken || typeof fetch !== "function") {
+      return this._panelVersionStatus;
+    }
+
+    try {
+      const response = await fetch("/api/asset_intelligence/panel_version", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: {
+          Accept: "application/json",
+          "Cache-Control": "no-cache",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const payload = await response.json();
+      const latestPanel = String(payload?.selected_panel || "");
+      const latestToken = String(payload?.cache_token || "");
+      const stale = !!latestPanel && !!latestToken && (
+        latestPanel !== runningPanel || latestToken !== runningToken
+      );
+
+      this._panelVersionStatus = {
+        running_panel: runningPanel,
+        running_token: runningToken,
+        latest_panel: latestPanel,
+        latest_token: latestToken,
+        stale,
+      };
+
+      if (!stale) {
+        this._panelVersionDismissed = false;
+      }
+
+      if (stale) {
+        this._render();
+      }
+    } catch (err) {
+      console.warn("Asset Intelligence panel version check failed", err);
+    }
+
+    return this._panelVersionStatus;
   }
 
   _render() {
@@ -3036,6 +3148,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       </style>
 
       <div class="ai-container">
+        ${this._renderPanelUpdateBanner()}
         ${content}
       </div>
     `;
@@ -3097,6 +3210,25 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
         </div>
       `;
     }
+  }
+
+  _renderPanelUpdateBanner() {
+    if (!this._panelVersionStatus?.stale || this._panelVersionDismissed) {
+      return "";
+    }
+
+    return `
+      <div class="ai-warning-box ai-panel-update-banner" style="margin-bottom:16px;">
+        <div style="font-weight:700; margin-bottom:6px;">A newer Asset Intelligence panel is available.</div>
+        <div style="margin-bottom:10px;">
+          Home Assistant has a newer frontend bundle than the one currently open. Reload this page to avoid stale UI behavior after an update.
+        </div>
+        <div class="ai-inline-actions" style="margin-top:0; justify-content:flex-start;">
+          <button class="ai-primary-button" type="button" data-panel-reload>Reload panel</button>
+          <button class="ai-secondary-button" type="button" data-panel-dismiss>Dismiss</button>
+        </div>
+      </div>
+    `;
   }
 
   /* ===========================
@@ -3183,7 +3315,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       ${
         isInitializing
           ? `<div class="ai-info" style="background: #e3f2fd; border-left: 4px solid #1976d2; padding: 12px 16px; margin: 12px 0; border-radius: 4px;">
-              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">â³ Initializing Environment Monitor</div>
+              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;"><ha-icon icon="mdi:home-clock-outline"></ha-icon><span>Initializing Environment Monitor</span></div>
               <div style="font-size: 13px; color: #0d47a1;">The system is currently loading room environment data from your sensors. Data will appear once the coordinator completes its first refresh cycle (typically within 1-2 minutes).</div>
             </div>`
           : ``
@@ -3401,7 +3533,7 @@ var AssetIntelligenceApp = globalThis.AssetIntelligenceApp || class AssetIntelli
       ${
         isInitializing
           ? `<div class="ai-info" style="background: #e3f2fd; border-left: 4px solid #1976d2; padding: 12px 16px; margin: 12px 0; border-radius: 4px;">
-              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px;">â³ Loading Room Environment Data</div>
+              <div style="font-weight: 600; color: #1565c0; margin-bottom: 4px; display: flex; align-items: center; gap: 8px;"><ha-icon icon="mdi:home-clock-outline"></ha-icon><span>Loading Room Environment Data</span></div>
               <div style="font-size: 13px; color: #0d47a1;">Sensor readings are being collected from your devices. Data will appear here once the environment monitor completes its first update cycle.</div>
             </div>`
           : ``
@@ -7561,6 +7693,19 @@ _getAssetTimelineItems(attrs) {
     this.querySelectorAll(".ai-fab").forEach((el) => {
       el.onclick = () => {
         this._openAddAssetDialog(this._view.roomId);
+      };
+    });
+
+    this.querySelectorAll("[data-panel-reload]").forEach((el) => {
+      el.onclick = () => {
+        window.location.reload();
+      };
+    });
+
+    this.querySelectorAll("[data-panel-dismiss]").forEach((el) => {
+      el.onclick = () => {
+        this._panelVersionDismissed = true;
+        this._render();
       };
     });
 
