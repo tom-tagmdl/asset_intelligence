@@ -1,0 +1,992 @@
+add_asset:
+  name: Add Asset
+  description: Create a new asset
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+    name:
+      name: Name
+      required: true
+      example: "Test Artwork"
+    area_id:
+      name: Area
+      required: false
+      example: "living_room"
+
+update_asset:
+  name: Update Asset
+  description: Update an existing asset
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+
+delete_asset:
+  name: Delete Asset
+  description: Delete an asset and automatically delete attached documents first
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "test_chair"
+
+# ----------------------------------------------------
+# ✅ NEW DOCUMENT STORAGE SERVICES
+# ----------------------------------------------------
+
+configure_document_storage:
+  name: Configure Document Storage
+  description: Define external document storage configuration
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    provider:
+      name: Provider
+      description: Storage provider (currently filesystem)
+      required: false
+      example: "filesystem"
+
+    root_path:
+      name: Root Path
+      description: Root directory where documents will be stored
+      required: false
+      example: "/share/asset_documents"
+
+    documents_enabled:
+      name: Enable Documents
+      description: Enable or disable document functionality
+      required: false
+      example: true
+
+    requires_network_storage:
+      name: Requires Network Storage
+      description: Whether document storage requires external network storage
+      required: false
+      example: true
+
+
+upload_document:
+  name: Upload Document
+  description: Upload a file and associate it with an asset using external storage
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+
+    type:
+      name: Document Type
+      required: true
+      example: "appraisal"
+
+    source_path:
+      name: Source Path
+      description: Path to the file inside Home Assistant
+      required: false
+      example: "/config/documents/appraisal.pdf"
+
+    content_base64:
+      name: File Content (Base64)
+      description: Base64-encoded file payload from UI file picker
+      required: false
+      example: "JVBERi0xLjQK..."
+
+    uploaded_filename:
+      name: Uploaded Filename
+      description: Original filename from UI file picker (used when filename override is not provided)
+      required: false
+      example: "appraisal_2026.pdf"
+
+    file_name:
+      name: File Name
+      description: Optional override filename
+      required: false
+      example: "appraisal_2026.pdf"
+
+    title:
+      name: Title
+      required: false
+      example: "2026 Appraisal"
+
+    notes:
+      name: Notes
+      required: false
+      example: "Insurance valuation document"
+
+    date:
+      name: Document Date
+      required: false
+      example: "2026-05-01"
+
+    tags:
+      name: Tags
+      required: false
+      example:
+        - "insurance"
+        - "appraisal"
+
+    preview_source_path:
+      name: Preview Source Path
+      required: false
+      example: "/config/documents/appraisal_preview.jpg"
+
+    preview_content_base64:
+      name: Preview Content (Base64)
+      description: Optional base64 preview image payload from UI file picker
+      required: false
+      example: "/9j/4AAQSkZJRgABAQ..."
+
+    mime_type:
+      name: MIME Type
+      description: MIME type for uploaded file
+      required: false
+      example: "application/pdf"
+
+    preview_mime_type:
+      name: Preview MIME Type
+      description: MIME type for uploaded preview file
+      required: false
+      example: "image/jpeg"
+
+    size_bytes:
+      name: File Size (bytes)
+      description: File size reported by UI file picker
+      required: false
+      example: 245819
+
+attach_document:
+  name: Attach Document
+  description: Attach an existing document reference to an asset without copying the file
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      description: The asset that owns the document
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: Optional explicit document identifier; one will be generated if omitted
+      required: false
+      example: "appraisal_2026"
+
+    type:
+      name: Document Type
+      description: Optional logical type such as appraisal, receipt, warranty, or certificate_of_authenticity
+      required: false
+      example: "appraisal"
+
+    title:
+      name: Title
+      description: Optional human-friendly document title
+      required: false
+      example: "Appraisal (2026)"
+
+    filename:
+      name: Filename
+      description: Optional filename for display/reference
+      required: false
+      example: "appraisal.pdf"
+
+    provider:
+      name: Provider
+      description: Storage provider identifier such as local, filesystem, nas, onedrive, or sharepoint
+      required: false
+      example: "local"
+
+    provider_document_id:
+      name: Provider Document ID
+      description: Optional provider-native identifier
+      required: false
+      example: "rare_painting/appraisal_2026.pdf"
+
+    location:
+      name: Location
+      description: Optional path or external reference for the document
+      required: false
+      example: "/config/appraisal.pdf"
+
+    mime_type:
+      name: MIME Type
+      description: Optional MIME type
+      required: false
+      example: "application/pdf"
+
+    size_bytes:
+      name: Size (Bytes)
+      description: Optional file size in bytes
+      required: false
+      example: 123456
+
+    checksum:
+      name: Checksum
+      description: Optional file checksum
+      required: false
+      example: "abc123"
+
+    created_at:
+      name: Created At
+      description: Optional document creation timestamp
+      required: false
+      example: "2026-06-05T12:00:00-05:00"
+
+    modified_at:
+      name: Modified At
+      description: Optional document modification timestamp
+      required: false
+      example: "2026-06-05T12:00:00-05:00"
+
+    date:
+      name: Document Date
+      description: Optional logical document date to preserve in metadata
+      required: false
+      example: "2026-05-01"
+
+    notes:
+      name: Notes
+      description: Optional notes stored in metadata
+      required: false
+      example: "Insurance valuation document"
+
+    tags:
+      name: Tags
+      required: false
+      example:
+        - "insurance"
+        - "appraisal"
+
+    metadata:
+      name: Metadata
+      description: Optional additional metadata dictionary
+      required: false
+      example:
+        source: "personal_archive"
+        version: 1
+
+update_document_metadata:
+  name: Update Document Metadata
+  description: Update metadata on an existing document record without re-uploading or re-attaching
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: Existing document ID to update
+      required: false
+      example: "appraisal_2026"
+
+    provider_document_id:
+      name: Provider Document ID
+      description: Alternate identifier for selecting the document
+      required: false
+      example: "https://vault.example.com/policies/policy_2026.pdf"
+
+    type:
+      name: Document Type
+      description: Updated logical type
+      required: false
+      example: "insurance_policy"
+
+    title:
+      name: Title
+      description: Updated human-friendly title
+      required: false
+      example: "Insurance Policy 2026"
+
+    date:
+      name: Document Date
+      description: Updated document date
+      required: false
+      example: "2026-05-01"
+
+    notes:
+      name: Notes
+      description: Updated notes
+      required: false
+      example: "Updated filing location note"
+
+    tags:
+      name: Tags
+      description: Replace tags with this list
+      required: false
+      example: ["insurance", "policy"]
+
+delete_document:
+  name: Delete Document
+  description: Remove a document from an asset and optionally delete stored file content
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      description: The asset that owns the document
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: Preferred document identifier to delete
+      required: false
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    provider_document_id:
+      name: Provider Document ID
+      description: Optional alternate identifier when document_id is not provided
+      required: false
+      example: "art_001/550e8400_appraisal_2026.pdf"
+
+    delete_storage:
+      name: Delete Stored File
+      description: When true, delete stored file bytes in addition to metadata link
+      required: false
+      example: true
+
+# ----------------------------------------------------
+# ✅ DOCUMENT ACCESS SERVICES (Phase 6.5)
+# ----------------------------------------------------
+
+get_document_info:
+  name: Get Document Info
+  description: Retrieve safe metadata and access information for a stored document
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      description: The asset that owns the document
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: Optional. Preferred identifier of the document
+      required: false
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    storage_identifier:
+      name: Storage Identifier
+      description: Optional alternative to document_id
+      required: false
+      example: "art_001/550e8400_appraisal_2026.pdf"
+
+
+check_document_availability:
+  name: Check Document Availability
+  description: Check whether document management is enabled and storage is currently available
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+check_stored_document_availability:
+  name: Check Stored Document Availability
+  description: Check whether a specific stored document is currently available and accessible
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      description: The asset that owns the document
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: Optional. Preferred identifier of the document
+      required: false
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    storage_identifier:
+      name: Storage Identifier
+      description: Optional alternative to document_id
+      required: false
+      example: "art_001/550e8400_appraisal_2026.pdf"
+
+# ----------------------------------------------------
+# ✅ EXISTING (UNCHANGED)
+# ----------------------------------------------------
+
+add_physical_document_location:
+  name: Add Physical Document Location
+  description: Record where a physical document is stored for an asset
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+    type:
+      name: Document Type
+      description: Required when creating a physical-only record; optional when document_id/provider_document_id is provided
+      required: false
+      example: "certificate_of_authenticity"
+    location:
+      name: Location
+      required: true
+      example: "safe"
+    notes:
+      name: Notes
+      required: false
+      example: "Fireproof safe in primary closet"
+    document_id:
+      name: Document ID
+      description: Optional. Link this physical location to a specific document record
+      required: false
+      example: "550e8400-e29b-41d4-a716-446655440000"
+    provider_document_id:
+      name: Provider Document ID
+      description: Optional. Link using provider-native identifier when available
+      required: false
+      example: "art_001/policy_2026.pdf"
+    title:
+      name: Document Title
+      description: Optional human-friendly document title
+      required: false
+      example: "Insurance Policy 2026"
+
+set_environment_requirements:
+  name: Set Environment Requirements
+  description: >
+    Define canonical environmental requirements for an asset using the
+    structured environment model. Fully aligned with room environment
+    signals and evaluation engine.
+
+  fields:
+    actor:
+      name: Actor
+      description: Optional. Who initiated this change (e.g., Tom, system)
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      description: Unique identifier of the asset
+      required: true
+      example: "art_1600s_oil_painting"
+
+    environment_requirements:
+      name: Environment Requirements
+      description: >
+        Canonical environment requirement structure. Supports partial updates.
+        Each signal uses min/max values aligned with room/environment model.
+      required: true
+      example:
+        climate:
+          temperature:
+            min: 65
+            max: 72
+          humidity:
+            min: 45
+            max: 55
+
+        light:
+          lux:
+            min: 0
+            max: 50
+          uv:
+            min: 0
+            max: 0.5
+
+        air_quality:
+          voc:
+            min: 0
+            max: 200
+          ozone:
+            min: 0
+            max: 5
+          no2:
+            min: 0
+            max: 20
+
+        particulates:
+          pm2_5:
+            min: 0
+            max: 12
+          pm10:
+            min: 0
+            max: 25
+
+        biological:
+          mold_index:
+            min: 0
+            max: 3
+
+        control_context:
+          co2:
+            min: 0
+            max: 1500
+
+        external_environment:
+          uv_index:
+            min: 0
+            max: 2
+
+        debounce:
+          red_transition_seconds: 600
+          recovery_seconds: 900
+
+set_custody_status:
+  name: Set Custody Status
+  description: Update the custody status of an asset (ownership, location, or loan state)
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+    status:
+      name: Custody Status
+      description: New custody status for the asset (e.g., owned_on_site, on_loan_out, in_transit)
+      required: true
+      example: "on_loan_out"
+    notes:
+      name: Notes
+      description: Optional context for this custody change (audit trail)
+      required: false
+      example: "Loaned to gallery for May exhibit"
+    holder:
+      name: Holder
+      description: Optional. Who currently has custody of the asset
+      required: false
+      example: "Dallas Museum of Art"
+    location_detail:
+      name: Location Detail
+      description: Optional. More specific location information
+      required: false
+      example: "Exhibit Hall 3"
+    effective_at:
+      name: Effective Time
+      description: Optional ISO timestamp when this status became effective
+      required: false
+      example: "2026-05-24T14:30:00"
+
+record_loan_out:
+  name: Record Loan Out
+  description: Record that an asset has been loaned out and track expected return
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+    counterparty:
+      name: Counterparty
+      description: Who the asset is loaned to
+      required: true
+      example: "Dallas Museum of Art"
+    start_date:
+      name: Start Date
+      description: Optional ISO date/time; defaults to now
+      required: false
+      example: "2026-05-24T15:00:00"
+    expected_return_date:
+      name: Expected Return Date
+      description: Optional ISO date/time
+      required: false
+      example: "2026-06-01T17:00:00"
+    purpose:
+      name: Purpose
+      required: false
+      example: "May exhibit"
+    location_detail:
+      name: Location Detail
+      required: false
+      example: "Exhibit Hall 3"
+    agreement_uri:
+      name: Agreement Document URI
+      description: Optional. media-source URI or file path reference to a loan agreement
+      required: false
+      example: "media-source://media_source/local/assets/art_001/loan_agreement_2026.pdf"
+    insurance_responsibility:
+      name: Insurance Responsibility
+      description: Optional. Who is responsible for insurance during the loan
+      required: false
+      example: "Borrower"
+    notes:
+      name: Notes
+      required: false
+      example: "Handled by curator Jane; return via insured courier"
+
+record_loan_in:
+  name: Record Loan In (Return / Close Loan)
+  description: Record that an asset has been returned and close an active loan_out record
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "art_001"
+    loan_id:
+      name: Loan ID
+      description: Optional. Required only if multiple active loans exist
+      required: false
+      example: "loan_abc123"
+    actual_return_date:
+      name: Actual Return Date
+      description: Optional ISO date/time; defaults to now
+      required: false
+      example: "2026-06-01T16:30:00"
+    return_status:
+      name: Return Custody Status
+      description: Optional. Defaults to owned_on_site
+      required: false
+      example: "owned_on_site"
+    return_location_detail:
+      name: Return Location Detail
+      required: false
+      example: "Primary closet"
+    notes:
+      name: Notes
+      required: false
+      example: "Returned in good condition; rehung same day"
+
+link_to_device:
+  name: Link Asset to Device
+  description: Link an asset to an existing Home Assistant device and/or entities
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "tv_den_001"
+    device_id:
+      name: Device ID
+      description: Optional. Home Assistant device registry id
+      required: false
+      example: "0351fe5040e0eac56a3a194a63ecf92c"
+    entity_ids:
+      name: Entity IDs
+      description: Optional. List of entity_ids to associate (e.g., media_player.den_tv)
+      required: false
+      example:
+        - "media_player.den_tv"
+        - "remote.den_apple_tv"
+
+unlink_from_device:
+  name: Unlink Asset from Device
+  description: Remove asset linkage to a device and/or entities
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "tv_den_001"
+    device_id:
+      name: Device ID
+      description: Optional. If provided, removes linked device_id (must match current)
+      required: false
+      example: "0351fe5040e0eac56a3a194a63ecf92c"
+    entity_ids:
+      name: Entity IDs
+      description: Optional. List of entity_ids to remove from linkage
+      required: false
+      example:
+        - "media_player.den_tv"
+    remove_all:
+      name: Remove All
+      description: Optional. If true, clears all device/entity links for this asset
+      required: false
+      example: true
+
+add_tracker:
+  name: Add Tracker
+  description: Attach a tracker entity to an asset
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "tv_den_001"
+
+    entity_id:
+      name: Tracker Entity
+      description: The device_tracker entity representing this asset
+      required: true
+      example: "device_tracker.tv_ble_tag"
+
+    name:
+      name: Friendly Name
+      required: false
+      example: "TV BLE Tag"
+
+    notes:
+      name: Notes
+      required: false
+      example: "Mounted behind TV"
+
+remove_tracker:
+  name: Remove Tracker
+  description: Detach a tracker from an asset
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+
+    asset_id:
+      name: Asset ID
+      required: true
+      example: "tv_den_001"
+
+    entity_id:
+      name: Tracker Entity
+      required: true
+      example: "device_tracker.tv_ble_tag"
+
+export_inventory:
+  name: Export Inventory Export assets as an insurance-ready CSV or JSON file under /media/local/exports/ 
+  fields:
+    actor:
+      name: Actor
+      required: false
+      example: "Tom"
+    format:
+      name: Format
+      description: csv or json
+      required: false
+      example: "csv"
+    filename:
+      name: Filename
+      description: Optional output filename (extension will be enforced)
+      required: false
+      example: "insurance_addendum.csv"
+
+set_room_environment:
+  name: Set Room Environment Configuration
+  description: >
+    Define environmental sensor sources and aggregation rules for a room
+    using the canonical environment model. This configuration determines
+    how raw sensor data is normalized into the room environment snapshot.
+
+  fields:
+    actor:
+      name: Actor
+      description: Optional. Who initiated this configuration
+      required: false
+      example: "Tom"
+
+    area_id:
+      name: Area ID
+      description: Home Assistant area (room)
+      required: true
+      example: "living_room"
+
+    environment_config:
+      name: Environment Configuration
+      description: >
+        Canonical environment configuration. Defines which sensors are used
+        and how their values are aggregated into the room environment model.
+      required: true
+      example:
+
+        climate:
+          temperature:
+            source_entities:
+              - sensor.living_room_temperature
+            aggregation: mean
+
+          humidity:
+            source_entities:
+              - sensor.living_room_humidity
+            aggregation: mean
+
+          dew_point:
+            source_entities:
+              - sensor.living_room_dew_point
+            aggregation: mean
+
+        light:
+          lux:
+            source_entities:
+              - sensor.living_room_lux
+            aggregation: mean
+
+          uv:
+            source_entities:
+              - sensor.living_room_uv
+            aggregation: mean
+
+        air_quality:
+          voc:
+            source_entities:
+              - sensor.airq_living_room_volatile_organic_compounds_parts
+            aggregation: mean
+
+          formaldehyde:
+            source_entities:
+              - sensor.airq_living_room_formaldehyde
+            aggregation: mean
+
+          ozone:
+            source_entities:
+              - sensor.airq_living_room_ozone
+            aggregation: mean
+
+          no2:
+            source_entities:
+              - sensor.airq_living_room_nitrogen_dioxide
+            aggregation: mean
+
+        particulates:
+          pm2_5:
+            source_entities:
+              - sensor.airq_living_room_pm2_5
+            aggregation: mean
+
+          pm10:
+            source_entities:
+              - sensor.airq_living_room_pm10
+            aggregation: mean
+
+        biological:
+          mold_index:
+            source_entities:
+              - sensor.airq_living_room_mold_index
+            aggregation: mean
+
+        structural:
+          pressure:
+            source_entities:
+              - sensor.airq_living_room_pressure
+            aggregation: mean
+
+          vibration:
+            source_entities:
+              - sensor.vibration_sensor
+            aggregation: mean
+
+        context:
+          noise:
+            source_entities:
+              - sensor.airq_living_room_noise
+            aggregation: mean
+
+        control_context:
+          co2:
+            source_entities:
+              - sensor.airq_living_room_carbon_dioxide
+            aggregation: mean
+
+    windows:
+      name: Windows
+      description: >
+        Optional. Define directional window exposure for the room.
+      required: false
+      example:
+        - direction: south
+          exposure: direct
+
+
+start_measurement:
+  name: Start Measurement
+  description: Start an environment measurement session for an asset
+  fields:
+    asset_id:
+      name: Asset ID
+      description: The ID of the asset to start measurement for
+      required: true
+      example: "painting_001"
+
+stop_measurement:
+  name: Stop Measurement
+  description: Stop an environment measurement session and generate a profile
+  fields:
+    asset_id:
+      name: Asset ID
+      description: The ID of the asset to stop measurement for
+      required: true
+      example: "painting_001"
+
+get_asset_documents:
+  name: Get Asset Documents
+  description: Retrieve all document metadata associated with an asset
+  fields:
+    asset_id:
+      name: Asset ID
+      description: The asset identifier
+      required: true
+      example: "art_001"
+
+get_document_by_id:
+  name: Get Document By ID
+  description: Retrieve metadata for a specific document associated with an asset
+  fields:
+    asset_id:
+      name: Asset ID
+      description: The asset identifier
+      required: true
+      example: "art_001"
+
+    document_id:
+      name: Document ID
+      description: The document identifier
+      required: true
+      example: "doc_001"

@@ -1,0 +1,14 @@
+{
+  "domain": "asset_intelligence",
+  "name": "Asset Intelligence",
+  "codeowners": ["@tom-tagmdl"],
+  "config_flow": true,
+  "dependencies": ["http"],
+  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started",
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
+  "loggers": ["custom_components.asset_intelligence"],
+  "requirements": [],
+  "version": "1.0.10"
+}
