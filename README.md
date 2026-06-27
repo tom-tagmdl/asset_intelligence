@@ -20,6 +20,7 @@ into
 
 ---
 
+<<<<<<< HEAD
 ## 🚀 Start Here
 
 To understand how the system works:
@@ -27,6 +28,13 @@ To understand how the system works:
 - 👉 [Concepts](https://github.com/tom-tagmdl/asset_intelligence/wiki/Concepts)
 - 👉 [Getting Started](https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started)
 - 👉 [System Flow Overview](https://github.com/tom-tagmdl/asset_intelligence/wiki/System-Flow-Overview)
+=======
+![Asset Intelligence Logo](custom_components/asset_intelligence/brand/logo_light.png)
+
+<img width="900" alt="ConceptModel" src="https://github.com/user-attachments/assets/dd1fc2fa-8ead-4580-8c7d-3618b137d0da" />
+
+## Documentation
+>>>>>>> 51c019844ac64f92fc8e8aa342dd4c37ed2f8884
 
 ---
 
