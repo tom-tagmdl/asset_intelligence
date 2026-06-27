@@ -17,9 +17,9 @@ It helps you answer:
 
 ## Images
 
-![Asset Intelligence Tile](custom_components/asset_intelligence/brand/integration_tile.png)
-
 ![Asset Intelligence Logo](custom_components/asset_intelligence/brand/logo_light.png)
+
+<img width="900" alt="ConceptModel" src="https://github.com/user-attachments/assets/dd1fc2fa-8ead-4580-8c7d-3618b137d0da" />
 
 ## Documentation
 
