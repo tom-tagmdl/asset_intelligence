@@ -9838,6 +9838,14 @@ _getAssetTimelineItems(attrs) {
       ? safeItem.details
       : {};
     const normalizedFieldChanges = this._normalizeActivityFieldChanges(details, safeItem);
+    const eventType = String(details?.type || "").toLowerCase();
+    const eventKind = String(safeItem?.kind || "").toLowerCase();
+    const isRiskStateEvent = eventKind === "risk" || eventType === "environment_risk_state_changed";
+    const changedFieldStatuses = this._computeActivityChangedFieldStatuses(
+      safeItem,
+      details,
+      normalizedFieldChanges,
+    );
 
     if (!window.customElements?.get?.("ha-dialog")) {
       const fallbackText = [
@@ -9871,10 +9879,13 @@ _getAssetTimelineItems(attrs) {
       ))
       .map(([key, value]) => [
         this._titleCase(String(key).replaceAll("_", " ")),
-        value,
+        this._formatActivityDetailValueByKey(key, value),
       ]);
 
     const changedFields = (() => {
+      if (isRiskStateEvent) {
+        return [];
+      }
       if (normalizedFieldChanges && typeof normalizedFieldChanges === "object") {
         const keys = Object.keys(normalizedFieldChanges);
         if (keys.length) return keys;
@@ -9888,14 +9899,37 @@ _getAssetTimelineItems(attrs) {
       ? `
         <div style="margin-top:12px; font-size:12px; font-weight:700; color:var(--secondary-text-color); text-transform:uppercase; letter-spacing:0.04em;">Changed fields</div>
         <div style="margin-top:6px; border:1px solid var(--divider-color); border-radius:8px; padding:10px 12px;">
-          <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:4px;">
-            ${changedFields.map((fieldName) => `<li>${this._escapeHtml(this._formatAuditFieldPath(fieldName))}</li>`).join("")}
+          <ul style="margin:0; padding-left:18px; display:flex; flex-direction:column; gap:6px;">
+            ${changedFields.map((fieldName) => {
+              const status = changedFieldStatuses[fieldName];
+              const fieldText = this._escapeHtml(this._formatAuditFieldPath(fieldName));
+              if (!status) {
+                return `<li>${fieldText}</li>`;
+              }
+
+              const statusColor = status.state === "out"
+                ? "var(--error-color, #c62828)"
+                : "var(--success-color, #2e7d32)";
+              const statusBg = status.state === "out"
+                ? "rgba(198, 40, 40, 0.12)"
+                : "rgba(46, 125, 50, 0.14)";
+              const statusLabel = this._escapeHtml(String(status.label || ""));
+
+              return `
+                <li style="color:${statusColor}; font-weight:700; display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                  <span>${fieldText}</span>
+                  <span style="font-size:11px; line-height:1.2; text-transform:uppercase; letter-spacing:0.03em; border-radius:999px; padding:2px 8px; color:${statusColor}; background:${statusBg};">${statusLabel}</span>
+                </li>
+              `;
+            }).join("")}
           </ul>
         </div>
       `
       : "";
 
-    const fieldChangesHtml = this._renderActivityFieldChanges(normalizedFieldChanges);
+    const fieldChangesHtml = isRiskStateEvent
+      ? ""
+      : this._renderActivityFieldChanges(normalizedFieldChanges);
 
     const hasChangeSections = !!changedFields.length || !!fieldChangesHtml;
 
@@ -9970,6 +10004,100 @@ _getAssetTimelineItems(attrs) {
     return this._escapeHtml(String(value));
   }
 
+  _formatActivityDetailValueByKey(key, value) {
+    const normalizedKey = String(key || "").trim().toLowerCase();
+    if (normalizedKey === "exposure_risk") {
+      return this._formatExposureRiskSummary(value);
+    }
+
+    if (normalizedKey === "spatial_context") {
+      return this._formatSpatialContextSummary(value);
+    }
+
+    if (normalizedKey === "outcome_comparison") {
+      return this._formatOutcomeComparisonSummary(value);
+    }
+
+    if (normalizedKey !== "debounce_action") {
+      return value;
+    }
+
+    const normalizedValue = String(value || "").trim().toLowerCase();
+    const labels = {
+      clear_red_pending: "Red debounce completed and transition applied",
+      set_red_pending: "Red debounce started (awaiting hold period)",
+      hold_red_pending: "Red debounce in progress",
+      none: "No debounce action",
+    };
+
+    if (labels[normalizedValue]) {
+      return labels[normalizedValue];
+    }
+
+    if (!normalizedValue) {
+      return "No debounce action";
+    }
+
+    return this._titleCase(normalizedValue.replaceAll("_", " "));
+  }
+
+  _formatExposureRiskSummary(value) {
+    if (!value || typeof value !== "object") return value;
+
+    const level = this._titleCase(String(value.level || "Unknown").toLowerCase());
+    const azimuth = this._toFiniteNumber(value.azimuth);
+    const elevation = this._toFiniteNumber(value.elevation);
+    const reasons = Array.isArray(value.reasons) ? value.reasons.filter(Boolean) : [];
+
+    return [
+      `Level: ${level}`,
+      `Sun azimuth: ${azimuth === null ? "No data" : `${azimuth.toFixed(2)}°`}`,
+      `Sun elevation: ${elevation === null ? "No data" : `${elevation.toFixed(2)}°`}`,
+      `Reasons: ${reasons.length ? reasons.join(", ") : "None"}`,
+    ];
+  }
+
+  _formatSpatialContextSummary(value) {
+    if (!value || typeof value !== "object") return value;
+
+    const direction = String(value.facing_direction || "").trim();
+    const directionalMatch = typeof value.directional_match === "boolean"
+      ? (value.directional_match ? "Yes" : "No")
+      : "Unknown";
+    const lux = this._toFiniteNumber(value.lux);
+    const uv = this._toFiniteNumber(value.uv);
+
+    return [
+      `Facing direction: ${direction ? this._titleCase(direction.toLowerCase()) : "Not set"}`,
+      `Directional match: ${directionalMatch}`,
+      `Lux at event: ${lux === null ? "No data" : lux}`,
+      `UV at event: ${uv === null ? "No data" : uv}`,
+    ];
+  }
+
+  _formatOutcomeComparisonSummary(value) {
+    if (!value || typeof value !== "object") return value;
+
+    const temp = this._toFiniteNumber(value.temperature_delta);
+    const humidity = this._toFiniteNumber(value.humidity_delta);
+    const lux = this._toFiniteNumber(value.lux_delta);
+    const uv = this._toFiniteNumber(value.uv_delta);
+
+    const formatDelta = (delta, unit = "") => {
+      if (delta === null) return "No data";
+      if (delta === 0) return `No change${unit}`;
+      const direction = delta > 0 ? "increased" : "decreased";
+      return `${direction} by ${Math.abs(delta).toFixed(2)}${unit}`;
+    };
+
+    return [
+      `Temperature: ${formatDelta(temp, "°F")}`,
+      `Humidity: ${formatDelta(humidity, "%")}`,
+      `Lux: ${formatDelta(lux)}`,
+      `UV: ${formatDelta(uv)}`,
+    ];
+  }
+
   _renderActivityFieldChanges(fieldChanges) {
     if (!fieldChanges || typeof fieldChanges !== "object") return "";
 
@@ -9992,6 +10120,152 @@ _getAssetTimelineItems(attrs) {
         </div>
       `;
     }).join("");
+  }
+
+  _computeActivityChangedFieldStatuses(item, details, fieldChanges) {
+    const candidates = new Set();
+    if (fieldChanges && typeof fieldChanges === "object") {
+      Object.keys(fieldChanges).forEach((key) => candidates.add(String(key)));
+    }
+
+    if (Array.isArray(details?.changed_fields)) {
+      details.changed_fields
+        .filter((entry) => typeof entry === "string" && entry.trim())
+        .forEach((entry) => candidates.add(String(entry)));
+    }
+
+    if (!candidates.size) return {};
+
+    const assetId = String(
+      details?.asset_id
+      || item?.asset_id
+      || this._view?.assetId
+      || ""
+    ).trim();
+    const assetEntity = assetId
+      ? this._getAssetEntities().find((a) => String(a?.attributes?.asset_id || "") === assetId)
+      : null;
+    const requirements = this._getLiveAssetEnvironmentRequirements(assetId, assetEntity?.attributes || {}) || {};
+    const activeViolationFields = this._extractViolationFieldsFromReasons(details?.reasons);
+
+    const output = {};
+    candidates.forEach((fieldName) => {
+      const status = this._classifyActivityFieldToleranceTransition(
+        String(fieldName || ""),
+        fieldChanges?.[fieldName],
+        requirements,
+        activeViolationFields,
+      );
+      if (status) {
+        output[fieldName] = status;
+      }
+    });
+
+    return output;
+  }
+
+  _classifyActivityFieldToleranceTransition(fieldName, change, requirements, activeViolationFields) {
+    const normalizedField = String(fieldName || "").trim().toLowerCase();
+    if (!normalizedField || normalizedField === "risk_state") {
+      return null;
+    }
+
+    const beforeState = this._evaluateFieldToleranceState(normalizedField, change?.before, requirements);
+    const afterState = this._evaluateFieldToleranceState(normalizedField, change?.after, requirements);
+
+    if (beforeState === "out" && afterState === "in") {
+      return { state: "in", label: "Back in tolerance" };
+    }
+
+    if (afterState === "out") {
+      return { state: "out", label: "Out of tolerance" };
+    }
+
+    if (activeViolationFields.has(normalizedField)) {
+      return { state: "out", label: "Out of tolerance" };
+    }
+
+    return null;
+  }
+
+  _evaluateFieldToleranceState(fieldName, value, requirements) {
+    const normalizedField = String(fieldName || "").trim().toLowerCase();
+    if (!normalizedField) return null;
+
+    if (normalizedField === "safety.leak") {
+      if (typeof value !== "boolean") return null;
+      return value ? "out" : "in";
+    }
+
+    const bounds = this._getRequirementBoundsForField(normalizedField, requirements);
+    const numericValue = this._toFiniteNumber(value);
+    if (!bounds || numericValue === null) return null;
+
+    if (bounds.min !== null && numericValue < bounds.min) return "out";
+    if (bounds.max !== null && numericValue > bounds.max) return "out";
+    return "in";
+  }
+
+  _getRequirementBoundsForField(fieldName, requirements) {
+    const normalizedField = String(fieldName || "").trim().toLowerCase();
+    const parts = normalizedField.split(".");
+    if (parts.length !== 2) return null;
+
+    const section = parts[0];
+    const signal = parts[1];
+    const sectionCfg = requirements?.[section];
+    if (!sectionCfg || typeof sectionCfg !== "object") return null;
+
+    const signalCfg = sectionCfg?.[signal];
+    if (!signalCfg || typeof signalCfg !== "object") return null;
+
+    const min = this._toFiniteNumber(signalCfg.min);
+    const max = this._toFiniteNumber(signalCfg.max);
+    if (min === null && max === null) return null;
+
+    return { min, max };
+  }
+
+  _toFiniteNumber(value) {
+    if (value === null || value === undefined || value === "") return null;
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  _extractViolationFieldsFromReasons(reasons) {
+    if (!Array.isArray(reasons) || !reasons.length) {
+      return new Set();
+    }
+
+    const mappings = [
+      { pattern: /temperature/i, field: "climate.temperature" },
+      { pattern: /humidity/i, field: "climate.humidity" },
+      { pattern: /dew\s*point/i, field: "climate.dew_point" },
+      { pattern: /\blight\b|\blux\b/i, field: "light.lux" },
+      { pattern: /\buv\b/i, field: "light.uv" },
+      { pattern: /\bvoc\b/i, field: "air_quality.voc" },
+      { pattern: /formaldehyde/i, field: "air_quality.formaldehyde" },
+      { pattern: /ozone/i, field: "air_quality.ozone" },
+      { pattern: /\bno2\b|no₂/i, field: "air_quality.no2" },
+      { pattern: /pm2\.?5/i, field: "particulates.pm2_5" },
+      { pattern: /pm10/i, field: "particulates.pm10" },
+      { pattern: /mold\s*index/i, field: "biological.mold_index" },
+      { pattern: /\bleak\b/i, field: "safety.leak" },
+      { pattern: /\bco2\b|co₂/i, field: "control_context.co2" },
+      { pattern: /pressure/i, field: "structural.pressure" },
+      { pattern: /noise/i, field: "context.noise" },
+      { pattern: /vibration/i, field: "structural.vibration" },
+    ];
+
+    const out = new Set();
+    reasons.forEach((reason) => {
+      const text = String(reason || "");
+      mappings.forEach(({ pattern, field }) => {
+        if (pattern.test(text)) out.add(field);
+      });
+    });
+
+    return out;
   }
 
   _normalizeActivityFieldChanges(details, item) {
