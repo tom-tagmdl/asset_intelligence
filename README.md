@@ -6,9 +6,9 @@
 
 # Asset Intelligence
 
-**What if your home didn’t just monitor conditions… but understood what those conditions affect?**
+**Asset Intelligence is the Homes Platform integration for asset-centric environmental stewardship, risk evaluation, provenance, and explainable home intelligence.**
 
-Asset Intelligence extends Home Assistant with a new concept:
+It extends Home Assistant with a new concept:
 
 👉 **Assets** — the things your home exists to support, protect, and preserve
 
