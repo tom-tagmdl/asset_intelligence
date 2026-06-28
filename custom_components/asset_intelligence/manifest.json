@@ -4,7 +4,7 @@
   "codeowners": ["@tom-tagmdl"],
   "config_flow": true,
   "dependencies": ["http"],
-  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki/Getting-Started",
+  "documentation": "https://github.com/tom-tagmdl/asset_intelligence/wiki",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/tom-tagmdl/asset_intelligence/issues",
