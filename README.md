@@ -457,7 +457,7 @@ The result:
 | `docs/asset_intelligence_examples.md` | Usage examples and automation patterns for common asset intelligence scenarios. |
 | `docs/asset_intelligence_troubleshooting.md` | Troubleshooting guide for common setup and runtime issues. |
 | `docs/quality_scale_audit.md` | Platinum audit log: evidence mapping for each Quality Scale requirement. |
-| `brand/` | Integration branding assets (icons, banners, logos) for the HA brand registry. |
+| `custom_components/asset_intelligence/brand/` | Integration branding assets (icons, banners, logos) for the HA brand registry. |
 | `tests/conftest.py` | Shared pytest fixtures for all test modules. |
 | `tests/test_config_flow.py` | Tests for UI config flow: setup, validation, and single-entry enforcement. |
 | `tests/test_setup.py` | Tests for integration startup and platform loading. |
