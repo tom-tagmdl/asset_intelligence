@@ -4,6 +4,7 @@
 <img width="1536" height="1024" alt="SystemFlowOverview2" src="https://github.com/user-attachments/assets/3dda4d61-1ca3-41c8-8a44-c799c40e7722" />
 
 
+
 # Asset Intelligence
 
 **Asset Intelligence is the Homes Platform integration for asset-centric environmental stewardship, risk evaluation, provenance, and explainable home intelligence.**
